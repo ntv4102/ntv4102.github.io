@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Võ Lâm Mật Tịch</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <div id="app">
+
+    <aside id="sidebar">
+      <div id="brand">
+        <div class="mark">ABC</div>
+      </div>
+      <div id="search-wrap">
+        <input id="search" type="text" placeholder="Tìm chủ đề…">
+      </div>
+      <button id="new-note-btn">+ Tạo chủ đề mới</button>
+      <div id="note-list"></div>
+
+      <div id="storage-status">
+        <div id="storage-status-text">Đang kiểm tra nơi lưu trữ…</div>
+        <button class="foot-btn wide" id="link-folder-btn">Liên kết thư mục lưu trữ…</button>
+        <button class="foot-btn wide" id="grant-again-btn" style="display:none;">Cấp lại quyền truy cập</button>
+      </div>
+
+      <div id="sidebar-foot">
+        <button class="foot-btn" id="export-btn">Xuất sao lưu</button>
+        <button class="foot-btn" id="import-btn">Nhập lại</button>
+        <input type="file" id="import-input" accept="application/json">
+      </div>
+    </aside>
+
+    <main id="main">
+      <div id="no-note" style="display:none;">
+        <div class="serif">Chưa có chủ đề nào được chọn</div>
+        <div>Chọn một chủ đề bên trái, hoặc tạo chủ đề mới để bắt đầu ghi chú.</div>
+        <button id="no-note-create">+ Tạo chủ đề mới</button>
+      </div>
+
+      <div id="note-view" style="display:none; flex:1; flex-direction:column; min-height:0;">
+        <div id="editor-head">
+          <input id="title-input" placeholder="Tiêu đề chủ đề…">
+          <div id="meta-row">
+            <span id="updated-at"></span>
+            <span id="save-state"></span>
+          </div>
+        </div>
+
+        <div id="toolbar">
+          <button class="tb-btn" data-block="P" title="Văn bản thường">¶</button>
+          <button class="tb-btn" data-block="H1" title="Tiêu đề 1">H1</button>
+          <button class="tb-btn" data-block="H2" title="Tiêu đề 2">H2</button>
+          <button class="tb-btn" data-block="H3" title="Tiêu đề 3">H3</button>
+          <div class="tb-sep"></div>
+          <button class="tb-btn" data-cmd="bold" title="In đậm"><b>B</b></button>
+          <button class="tb-btn" data-cmd="italic" title="In nghiêng"><i>I</i></button>
+          <button class="tb-btn" data-cmd="underline" title="Gạch chân"><u>U</u></button>
+          <button class="tb-btn" id="btn-clear-format" title="Xoá định dạng, đưa về font/size chuẩn của trang">Tẩy định
+            dạng</button>
+          <div class="tb-sep"></div>
+          <button class="tb-btn" data-align="left" title="Căn ngang: Trái (Đoạn văn hoặc Ô bảng)">⫷ Trái</button>
+          <button class="tb-btn" data-align="center" title="Căn ngang: Giữa (Đoạn văn hoặc Ô bảng)">≡ Giữa</button>
+          <button class="tb-btn" data-align="right" title="Căn ngang: Phải (Đoạn văn hoặc Ô bảng)">⫸ Phải</button>
+          <div class="tb-sep"></div>
+          <button class="tb-btn" data-valign="top" title="Căn dọc: Trên (Ô trong bảng)">⤒ Trên</button>
+          <button class="tb-btn" data-valign="middle" title="Căn dọc: Giữa (Ô trong bảng)">⇕ Giữa</button>
+          <button class="tb-btn" data-valign="bottom" title="Căn dọc: Dưới (Ô trong bảng)">⤓ Dưới</button>
+          <div class="tb-sep"></div>
+          <button class="tb-btn" data-cmd="insertUnorderedList" title="Danh sách chấm">• Danh sách</button>
+          <button class="tb-btn" data-cmd="insertOrderedList" title="Danh sách số">1. Danh sách</button>
+          <button class="tb-btn" id="btn-list-alpha" title="Danh sách chữ (a, b, c)">a. Danh sách</button>
+          <div class="tb-sep"></div>
+          <button class="tb-btn" id="btn-check" title="Chèn mục kiểm tra Đúng/Sai (cả dòng)">☑ Dòng Đúng/Sai</button>
+          <button class="tb-btn" id="btn-icon" title="Chèn icon Đúng/Sai nhỏ, đặt được vào ô bảng hoặc bất kỳ đâu">◐
+            Icon Đ/S</button>
+          <button class="tb-btn" id="btn-table" title="Chèn bảng (kéo được viền để đổi kích thước hàng/cột)">▦
+            Bảng</button>
+          <button class="tb-btn" data-block="BLOCKQUOTE" title="Trích dẫn / ghi chú">❝ Ghi chú</button>
+        </div>
+
+        <div id="editor-scroll">
+          <div id="editor-wrap">
+            <div id="editor" contenteditable="true" data-placeholder="Bắt đầu ghi lại kiến thức của bạn…"></div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+  </div>
+
+  <div id="modal-bg">
+    <div id="modal">
+      <p id="modal-text">Bạn có chắc muốn xoá?</p>
+      <div class="modal-btns">
+        <button class="btn-cancel" id="modal-cancel">Huỷ</button>
+        <button class="btn-danger" id="modal-ok">Xoá</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+
+</html>
