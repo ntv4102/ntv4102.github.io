@@ -323,6 +323,19 @@ h3,
   border-color: var(--accent);
 }
 
+#gh-modal .gh-remember {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+#gh-modal .gh-remember input {
+  width: auto;
+  margin: 0;
+}
+
 .gh-modal-hint {
   font-size: 11px;
   color: var(--ink-faint);

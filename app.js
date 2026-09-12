@@ -30,7 +30,8 @@
     modalOk: document.getElementById('modal-ok'),
     modalCancel: document.getElementById('modal-cancel'),
     storageStatusText: document.getElementById('storage-status-text'),
-    copyLinkBtn: document.getElementById('copy-link-btn'),
+    githubConnectBtn: document.getElementById('github-connect-btn'),
+    githubDisconnectBtn: document.getElementById('github-disconnect-btn'),
     btnHighlightCustom: document.getElementById('btn-highlight-custom'),
     btnHighlightClear: document.getElementById('btn-highlight-clear')
   };
@@ -79,165 +80,44 @@
     return d.toLocaleString('vi-VN', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
   }
 
-  /* =========================================================
-     LƯU TRỮ — 100% qua một API riêng do bạn tự host (không còn
-     lưu ra thư mục trên máy, không dùng token GitHub, không dùng
-     localStorage làm nơi lưu chính).
-
-     Cách hoạt động:
-     - Có một "không gian dữ liệu" MẶC ĐỊNH, cố định (DEFAULT_SPACE_ID
-       bên dưới) — mở đúng trang này (URL trơn, không cần gắn thêm
-       gì) là luôn thấy lại toàn bộ ghi chú cũ, trên bất kỳ thiết bị
-       nào. Không còn sinh mã ngẫu nhiên mỗi lần mở nữa.
-     - Nếu muốn tách riêng một "sổ tay" khác dùng chung code/host
-       này (ví dụ cho người khác dùng độc lập), mở kèm ?s=mot-ma-tuy-y
-       ở cuối URL — không gắn ?s thì luôn dùng không gian mặc định.
-     - Ai có URL (kèm hoặc không kèm ?s=...) đều đọc/ghi được ngay —
-       không cần đăng nhập. Đừng đăng công khai link nếu không muốn
-       người lạ sửa nội dung.
-     - Bạn cần tự deploy một backend nhỏ (miễn phí) để nhận các
-       lệnh đọc/ghi này — xem file worker.js đi kèm và hướng dẫn
-       deploy Cloudflare Worker + KV. Sau khi deploy xong, dán URL
-       worker vào API_BASE bên dưới.
-     ========================================================= */
-
-  var API_BASE = 'https://so-tay-kien-thuc-ap.ntv-4102.workers.dev';
-
-  // Mã không gian dữ liệu mặc định — cố định, không đổi mỗi lần mở.
-  // Có thể đổi thành chuỗi khác nếu muốn, nhưng chỉ đổi 1 LẦN DUY NHẤT
-  // rồi giữ nguyên mãi mãi, vì đổi lại sẽ như "mở sổ tay trống mới".
-  var DEFAULT_SPACE_ID = 'mty0axhm2wolzh9y';
-
-  function getOrCreateSpaceId(){
-    var params = new URLSearchParams(location.search);
-    var s = params.get('s');
-    if(s && /^[A-Za-z0-9_-]{6,64}$/.test(s)) return s;
-    return DEFAULT_SPACE_ID;
+  /* ---------------- lưu trữ qua Worker OAuth ---------------- */
+  var WORKER_API = 'https://so-tay-kien-thuc-ap.ntv-4102.workers.dev/';
+  var CACHE_PREFIX = 'knowledge-notes.cache.oauth.';
+  var apiBroken = false;
+  var authenticated = false;
+  function hasGithubConnection(){ return authenticated; }
+  function cacheKey(name){ return CACHE_PREFIX + name; }
+  function readCache(name, fallback){ try { var v=localStorage.getItem(cacheKey(name)); return v===null ? fallback : JSON.parse(v); } catch(e){ return fallback; } }
+  function writeCache(name, value){ localStorage.setItem(cacheKey(name), JSON.stringify(value)); }
+  async function workerFetch(path, options){
+    var res = await fetch(WORKER_API + path, Object.assign({ credentials:'include' }, options || {}));
+    if(!res.ok) throw new Error('Worker API ' + res.status);
+    return res;
   }
-  var SPACE_ID = getOrCreateSpaceId();
-  var apiBroken = false; // true nếu không gọi được API (sai API_BASE, mất mạng, worker lỗi...)
-
-  function apiUrl(path){
-    return API_BASE.replace(/\/+$/, '') + '/' + encodeURIComponent(SPACE_ID) + '/' + path;
-  }
-
-  async function apiFetch(path, options){
-    try{
-      var res = await fetch(apiUrl(path), options);
-      if(!res.ok){
-        apiBroken = true;
-        throw new Error('API ' + res.status + ' ' + res.statusText);
-      }
-      apiBroken = false;
-      return res;
-    }catch(e){
-      apiBroken = true;
-      if(e instanceof TypeError){
-        throw new Error('Không kết nối được API. Kiểm tra API_BASE, HTTPS và CORS.');
-      }
-      throw e;
-    }
-  }
-
-  function shareLink(){ return location.href; }
-
   var Api = {
-    async getIndex(){
-      try{
-        var res = await fetch(apiUrl('index'));
-        if(res.status === 404){ apiBroken = false; return []; }
-        if(!res.ok) throw new Error('index ' + res.status);
-        apiBroken = false;
-        return await res.json();
-      }catch(e){ apiBroken = true; return []; }
-    },
-    async putIndex(arr){
-      await apiFetch('index', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(arr)
-      });
-    },
-    async getNote(id){
-      try{
-        var res = await fetch(apiUrl('notes/' + encodeURIComponent(id)));
-        if(res.status === 404){ apiBroken = false; return null; }
-        if(!res.ok) throw new Error('note ' + res.status);
-        apiBroken = false;
-        return await res.json();
-      }catch(e){ apiBroken = true; return null; }
-    },
-    async putNote(id, data){
-      await apiFetch('notes/' + encodeURIComponent(id), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
-    },
-    async deleteNote(id){
-      try{
-        await fetch(apiUrl('notes/' + encodeURIComponent(id)), { method: 'DELETE' });
-      }catch(e){}
-    },
-    async getLast(){
-      try{
-        var res = await fetch(apiUrl('last'));
-        if(!res.ok) return null;
-        var j = await res.json();
-        return j && j.id ? j.id : null;
-      }catch(e){ return null; }
-    },
-    async setLast(id){
-      try{
-        await fetch(apiUrl('last'), {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: id })
-        });
-      }catch(e){}
-    }
+    async getIndex(){ if(!hasGithubConnection()) return readCache('index', []); try { var r=await workerFetch('/index'); var v=await r.json(); writeCache('index',v); return v; } catch(e){ apiBroken=true; return readCache('index',[]); } },
+    async putIndex(arr){ await workerFetch('/index',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(arr)}); writeCache('index',arr); },
+    async getNote(id){ if(!hasGithubConnection()) return readCache('note.'+id,null); try { var r=await workerFetch('/notes/'+encodeURIComponent(id)); var v=await r.json(); writeCache('note.'+id,v); return v; } catch(e){ apiBroken=true; return readCache('note.'+id,null); } },
+    async putNote(id,data){ await workerFetch('/notes/'+encodeURIComponent(id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); writeCache('note.'+id,data); },
+    async deleteNote(id){ await workerFetch('/notes/'+encodeURIComponent(id),{method:'DELETE'}); localStorage.removeItem(cacheKey('note.'+id)); },
+    async getLast(){ if(!hasGithubConnection()) return readCache('last',null); try { var r=await workerFetch('/last'); var v=await r.json(); var id=v&&v.id?v.id:null; writeCache('last',id); return id; } catch(e){ apiBroken=true; return readCache('last',null); } },
+    async setLast(id){ await workerFetch('/last',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})}); writeCache('last',id); }
   };
-
-  async function loadIndex(){
-    state.index = await Api.getIndex();
-  }
-  async function saveIndex(){
-    await Api.putIndex(state.index);
-    updateStorageStatusUI();
-  }
-  async function loadNote(id){
-    return await Api.getNote(id);
-  }
-  async function saveNote(id, data){
-    await Api.putNote(id, data);
-    updateStorageStatusUI();
-  }
-  async function deleteNoteStorage(id){
-    await Api.deleteNote(id);
-  }
-
+  async function loadIndex(){ state.index=await Api.getIndex(); }
+  async function saveIndex(){ await Api.putIndex(state.index); updateStorageStatusUI(); }
+  async function loadNote(id){ return await Api.getNote(id); }
+  async function saveNote(id,data){ await Api.putNote(id,data); updateStorageStatusUI(); }
+  async function deleteNoteStorage(id){ await Api.deleteNote(id); }
   function updateStorageStatusUI(){
-    var t = els.storageStatusText;
-    if(API_BASE.indexOf('REPLACE-WITH-YOUR-WORKER-URL') !== -1){
-      t.textContent = 'Chưa cấu hình API_BASE trong app.js — mở file worker.js đi kèm để deploy backend rồi dán URL vào đó.';
-    } else if(apiBroken){
-      t.textContent = 'Không gọi được API lưu trữ ngay lúc này (kiểm tra mạng, hoặc API_BASE trong app.js). Thay đổi có thể chưa được lưu.';
-    } else {
-      t.textContent = 'Đang lưu trực tiếp qua API — mở đúng trang này (URL trơn, không cần thêm gì) ở bất kỳ thiết bị nào cũng thấy và sửa được cùng dữ liệu.';
-    }
+    var t=els.storageStatusText;
+    if(!hasGithubConnection()){ t.textContent=state.index.length ? 'Đang xem bản ghi chú đã lưu trên thiết bị (chỉ đọc).' : 'Chưa đăng nhập GitHub — hãy đăng nhập để tải ghi chú.'; els.githubConnectBtn.textContent='Đăng nhập GitHub để lưu'; els.githubDisconnectBtn.hidden=true; }
+    else if(apiBroken){ t.textContent='Không gọi được Worker/GitHub. Đang dùng bản cache chỉ đọc.'; els.githubConnectBtn.textContent='Đăng nhập lại GitHub'; els.githubDisconnectBtn.hidden=false; }
+    else { t.textContent='Đã đăng nhập GitHub — ghi chú lưu trong repository riêng tư.'; els.githubConnectBtn.textContent='Đăng nhập GitHub'; els.githubDisconnectBtn.hidden=false; }
+    setReadOnly(!hasGithubConnection() || apiBroken);
   }
-
-  els.copyLinkBtn.addEventListener('click', async function(){
-    try{
-      await navigator.clipboard.writeText(shareLink());
-      els.copyLinkBtn.textContent = 'Đã sao chép!';
-    }catch(e){
-      prompt('Sao chép link chia sẻ:', shareLink());
-    }
-    setTimeout(function(){ els.copyLinkBtn.textContent = '🔗 Sao chép link chia sẻ'; }, 1500);
-  });
-
-
+  function setReadOnly(readOnly){ els.title.readOnly=readOnly; els.editor.contentEditable=readOnly?'false':'true'; els.toolbar.style.pointerEvents=readOnly?'none':''; els.toolbar.style.opacity=readOnly?'0.55':''; els.newBtn.disabled=readOnly; els.noNoteCreate.disabled=readOnly; }
+  els.githubConnectBtn.addEventListener('click', function(){ location.href=WORKER_API+'/auth/login?return_to='+encodeURIComponent(location.href); });
+  els.githubDisconnectBtn.addEventListener('click', async function(){ try { await fetch(WORKER_API+'/auth/logout',{credentials:'include'}); }catch(e){} authenticated=false; apiBroken=false; updateStorageStatusUI(); renderList(); });
   /* ---------------- rendering sidebar ---------------- */
   function renderList(){
     var q = els.search.value.trim().toLowerCase();
@@ -298,13 +178,17 @@
     if(normalizedListState) scheduleSave();
     els.noNote.style.display = 'none';
     els.noteView.style.display = 'flex';
-    Api.setLast(id);
+    if(hasGithubConnection()) Api.setLast(id);
     renderList();
     updateToolbarState();
     setSidebarOpen(false);
   }
 
   async function createNote(prefill){
+    if(!hasGithubConnection()){
+      updateStorageStatusUI();
+      return;
+    }
     if(state.currentId && state.dirty){
       await doSave();
     }
@@ -320,6 +204,10 @@
   }
 
   function confirmDeleteNote(id, title){
+    if(!hasGithubConnection()){
+      updateStorageStatusUI();
+      return;
+    }
     els.modalText.textContent = 'Xoá chủ đề "' + (title || 'Chưa có tiêu đề') + '"? Không thể hoàn tác.';
     els.modalBg.classList.add('show');
     els.modalOk.onclick = async function(){
@@ -368,7 +256,7 @@
   }
 
   async function doSave(){
-    if(!state.currentId || state.isSaving) return;
+    if(!state.currentId || state.isSaving || !hasGithubConnection()) return;
     if(state.saveTimer){
       clearTimeout(state.saveTimer);
       state.saveTimer = null;
@@ -381,17 +269,27 @@
       var now = Date.now();
       var title = els.title.value.trim();
       var html = els.editor.innerHTML;
-      await saveNote(state.currentId, { title: title, html: html });
       var meta = state.index.find(function(n){ return n.id === state.currentId; });
-      if(meta){ meta.title = title; meta.updatedAt = now; }
-      await saveIndex();
+      var previousMeta = meta && { title: meta.title, updatedAt: meta.updatedAt };
+      if(meta){
+        meta.title = title;
+        meta.updatedAt = now;
+      }
+      await Promise.all([
+        saveNote(state.currentId, { title: title, html: html }),
+        saveIndex()
+      ]);
       state.dirty = false;
       els.updatedAt.textContent = 'Cập nhật ' + fmtTime(now);
-      els.saveState.textContent = apiBroken ? 'Không lưu được qua API — hãy dùng "Xuất sao lưu"' : 'Đã lưu';
+      els.saveState.textContent = apiBroken ? 'Không lưu được qua GitHub — hãy dùng "Xuất sao lưu"' : 'Đã lưu';
       els.saveState.title = '';
       els.saveState.classList.remove('saving');
       renderList();
     }catch(e){
+      if(meta && previousMeta){
+        meta.title = previousMeta.title;
+        meta.updatedAt = previousMeta.updatedAt;
+      }
       els.saveState.textContent = 'Lỗi lưu trữ!';
       els.saveState.classList.remove('saving');
       els.saveState.classList.add('dirty');
@@ -417,20 +315,10 @@
     }
   });
 
-  // Cảnh báo / cố gắng lưu qua API nếu người dùng đóng trang khi chưa lưu
-  // (không dùng localStorage — vẫn cố gọi API lần cuối bằng keepalive)
+  // GitHub API không đảm bảo hoàn tất một commit khi tab đang đóng.
+  // Cảnh báo người dùng thay vì giả vờ đã lưu thành công.
   window.addEventListener('beforeunload', function(ev){
     if(state.dirty && state.currentId){
-      try{
-        var title = els.title.value.trim();
-        var html = els.editor.innerHTML;
-        fetch(apiUrl('notes/' + encodeURIComponent(state.currentId)), {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: title, html: html }),
-          keepalive: true
-        });
-      }catch(e){}
       ev.preventDefault();
       ev.returnValue = '';
     }
@@ -2461,14 +2349,32 @@
       '<p>Nhấn "▦ Bảng" để chèn bảng, gõ trực tiếp vào từng ô. Bạn có thể căn lề (<b>Trái / Giữa / Phải</b>) cho từng ô hoặc cả cột bằng các nút căn lề trên thanh công cụ chính hoặc các nút nhỏ ngay trên đầu bảng. Đưa chuột tới sát viền phải một ô đầu bảng để kéo đổi độ rộng cột, hoặc sát viền dưới một hàng để kéo đổi chiều cao hàng.</p>' +
       buildTableHTML(3,3).replace('Cột 1','Thuật ngữ').replace('Cột 2','Định nghĩa').replace('Cột 3','Tự đánh giá') +
       '<h3>5. Lưu trữ</h3>' +
-      '<p>Nội dung được lưu khi bạn nhấn <b>Ctrl + S</b> (hoặc <b>Command + S</b> trên macOS), hoặc tự động lưu định kỳ mỗi 1 phút nếu có thay đổi. Mọi dữ liệu lưu qua một API riêng, gắn với địa chỉ trang này (không cần thêm gì vào URL) — mở đúng trang trên bất kỳ thiết bị nào cũng thấy và sửa được cùng dữ liệu, không cần đăng nhập. Dùng nút "🔗 Sao chép link chia sẻ" ở cuối danh sách bên trái để gửi cho thiết bị khác hoặc người khác — nhớ rằng ai có link đó cũng sửa được.</p>';
+      '<p>Nội dung được lưu khi bạn nhấn <b>Ctrl + S</b> (hoặc <b>Command + S</b> trên macOS), hoặc tự động lưu định kỳ mỗi 1 phút nếu có thay đổi. Dữ liệu nằm trong repository GitHub riêng tư; đăng nhập qua Worker OAuth để đồng bộ. Nếu chưa lưu, hãy lưu thủ công trước khi đóng tab.</p>';
   }
 
   /* ---------------- init ---------------- */
   async function init(){
+    try{
+      var me = await fetch(WORKER_API + '/auth/me', { credentials:'include' });
+      authenticated = me.ok;
+    }catch(e){ authenticated = false; }
     updateStorageStatusUI();
+    if(!hasGithubConnection()){
+      await loadIndex();
+      updateStorageStatusUI();
+      renderList();
+      if(state.index.length){
+        var cachedTarget = state.index.slice().sort(function(a,b){ return b.updatedAt - a.updatedAt; })[0];
+        await openNote(cachedTarget.id);
+      }else{
+        els.noNote.style.display = 'flex';
+        els.noteView.style.display = 'none';
+      }
+      return;
+    }
     await loadIndex();
-    if(state.index.length === 0){
+    updateStorageStatusUI();
+    if(state.index.length === 0 && !apiBroken){
       await createNote({ title: 'Hướng dẫn sử dụng', html: guideHTML() });
       return;
     }
@@ -2482,6 +2388,8 @@
   init().catch(function(err){
     apiBroken = true;
     updateStorageStatusUI();
+    els.noNote.style.display = 'flex';
+    els.noteView.style.display = 'none';
     console.error('Không thể khởi tạo sổ tay:', err);
   });
 })();
