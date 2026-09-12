@@ -16,7 +16,7 @@ const corsHeaders = (request) => {
     'Access-Control-Allow-Origin': origin || '*',
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Allow-Methods': 'GET,PUT,DELETE,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Vary': 'Origin'
   };
 };
@@ -38,10 +38,15 @@ const githubPath = (env, path) =>
   encodeURIComponent(env.GITHUB_REPO_NAME) + '/contents/' + path;
 
 async function github(request, env, path, options) {
-  return fetch(githubPath(env, path), Object.assign({
-    headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28',
-      Authorization: 'Bearer ' + request.githubToken }
-  }, options || {}));
+  const baseHeaders = {
+    Accept: 'application/vnd.github+json',
+    'User-Agent': 'so-tay-kien-thuc-worker',
+    'X-GitHub-Api-Version': '2022-11-28',
+    Authorization: 'Bearer ' + request.githubToken
+  };
+  const requestOptions = Object.assign({}, options || {});
+  requestOptions.headers = Object.assign(baseHeaders, requestOptions.headers || {});
+  return fetch(githubPath(env, path), requestOptions);
 }
 async function requireSession(request, env) {
   const auth = request.headers.get('Authorization') || '';
@@ -138,7 +143,8 @@ export default {
       if (!session) return json(request, { authenticated: false }, 401);
       request.githubToken = session.token;
       const gh = await fetch('https://api.github.com/user', { headers: {
-        Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + request.githubToken,
+        Accept: 'application/vnd.github+json', 'User-Agent': 'so-tay-kien-thuc-worker',
+        Authorization: 'Bearer ' + request.githubToken,
         'X-GitHub-Api-Version': '2022-11-28'
       }});
       const user = gh.ok ? await gh.json() : {};
