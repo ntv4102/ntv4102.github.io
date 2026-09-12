@@ -91,7 +91,12 @@
   function writeCache(name, value){ localStorage.setItem(cacheKey(name), JSON.stringify(value)); }
   async function workerFetch(path, options){
     var res = await fetch(WORKER_API + path, Object.assign({ credentials:'include' }, options || {}));
-    if(!res.ok) throw new Error('Worker API ' + res.status);
+    if(!res.ok){
+      var detail = '';
+      try { detail = (await res.text()).slice(0, 180); } catch(e) {}
+      if(res.status === 401) authenticated = false;
+      throw new Error('Worker API ' + res.status + (detail ? ': ' + detail : ''));
+    }
     return res;
   }
   var Api = {
@@ -111,7 +116,7 @@
   function updateStorageStatusUI(){
     var t=els.storageStatusText;
     if(!hasGithubConnection()){ t.textContent=state.index.length ? 'Đang xem bản ghi chú đã lưu trên thiết bị (chỉ đọc).' : 'Chưa đăng nhập GitHub — hãy đăng nhập để tải ghi chú.'; els.githubConnectBtn.textContent='Đăng nhập GitHub để lưu'; els.githubDisconnectBtn.hidden=true; }
-    else if(apiBroken){ t.textContent='Không gọi được Worker/GitHub. Đang dùng bản cache chỉ đọc.'; els.githubConnectBtn.textContent='Đăng nhập lại GitHub'; els.githubDisconnectBtn.hidden=false; }
+    else if(apiBroken){ t.textContent='Không gọi được Worker/GitHub. Đang dùng cache chỉ đọc — hãy đăng nhập lại.'; els.githubConnectBtn.textContent='Đăng nhập lại GitHub'; els.githubDisconnectBtn.hidden=false; }
     else { t.textContent='Đã đăng nhập GitHub — ghi chú lưu trong repository riêng tư.'; els.githubConnectBtn.textContent='Đăng nhập GitHub'; els.githubDisconnectBtn.hidden=false; }
     setReadOnly(!hasGithubConnection() || apiBroken);
   }

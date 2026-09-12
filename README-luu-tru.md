@@ -46,7 +46,8 @@ Sau khi đã tải dữ liệu, app giữ cache cục bộ để xem offline ở
 ## An toàn
 
 - Không còn nhập hoặc lưu GitHub token ở frontend.
-- Cookie phiên dùng `HttpOnly`, `Secure`, `SameSite=None`.
+- Cookie phiên dùng `HttpOnly`, `Secure`, `SameSite=None`, `Partitioned`
+  để hoạt động khi app GitHub Pages và Worker ở hai domain khác nhau.
 - OAuth state có thời hạn 10 phút.
 - Session Worker có thời hạn 30 ngày.
 - Chỉ cấp quyền repository cần thiết cho OAuth App và giới hạn repository

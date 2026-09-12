@@ -7,6 +7,8 @@
  */
 const COOKIE = 'notes_session';
 const CALLBACK = '/auth/callback';
+const SESSION_COOKIE = COOKIE + '=SESSION; HttpOnly; Secure; SameSite=None; Partitioned; Path=/; Max-Age=2592000';
+const CLEAR_COOKIE = COOKIE + '=; HttpOnly; Secure; SameSite=None; Partitioned; Path=/; Max-Age=0';
 
 const corsHeaders = (request) => {
   const origin = request.headers.get('Origin');
@@ -111,7 +113,7 @@ export default {
       const session = random();
       await env.OAUTH_SESSIONS_KV.put('session:' + session, token.access_token, { expirationTtl: 2592000 });
       return new Response(null, { status: 302, headers: Object.assign(corsHeaders(request), {
-        Location: returnTo, 'Set-Cookie': COOKIE + '=' + encodeURIComponent(session) + '; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=2592000'
+        Location: returnTo, 'Set-Cookie': SESSION_COOKIE.replace('SESSION', encodeURIComponent(session))
       })});
     }
     if (url.pathname === '/auth/me') {
@@ -129,7 +131,7 @@ export default {
       const id = cookieValue(request);
       if (id) await env.OAUTH_SESSIONS_KV.delete('session:' + id);
       return new Response(null, { status: 204, headers: Object.assign(corsHeaders(request), {
-        'Set-Cookie': COOKIE + '=; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=0'
+        'Set-Cookie': CLEAR_COOKIE
       })});
     }
     const match = url.pathname.match(/^\/(index|last|notes\/[A-Za-z0-9_-]+)$/);
