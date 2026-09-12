@@ -44,7 +44,9 @@ async function github(request, env, path, options) {
   }, options || {}));
 }
 async function requireSession(request, env) {
-  const id = cookieValue(request);
+  const auth = request.headers.get('Authorization') || '';
+  const bearer = auth.indexOf('Bearer ') === 0 ? auth.slice(7).trim() : '';
+  const id = bearer || cookieValue(request);
   if (!id) return null;
   const token = await env.OAUTH_SESSIONS_KV.get('session:' + id);
   return token ? { id, token } : null;
@@ -57,8 +59,10 @@ async function proxy(request, env, session, path) {
     let existing = await github(request, env, path);
     let sha = null;
     if (existing.ok) sha = (await existing.json()).sha;
+    const payload = { message: 'Update notes', content: btoa(unescape(encodeURIComponent(value))) };
+    if (sha) payload.sha = sha;
     options = { method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: 'Update notes', content: btoa(unescape(encodeURIComponent(value))), sha }) };
+      body: JSON.stringify(payload) };
   } else if (request.method === 'DELETE') {
     const existing = await github(request, env, path);
     if (!existing.ok) return response(request, 'OK');
@@ -112,9 +116,22 @@ export default {
       if (!token.access_token) return response(request, 'Không lấy được GitHub access token.', 502);
       const session = random();
       await env.OAUTH_SESSIONS_KV.put('session:' + session, token.access_token, { expirationTtl: 2592000 });
+      const authCode = random();
+      await env.OAUTH_SESSIONS_KV.put('exchange:' + authCode, session, { expirationTtl: 120 });
+      const redirect = new URL(returnTo);
+      redirect.searchParams.set('oauth_code', authCode);
       return new Response(null, { status: 302, headers: Object.assign(corsHeaders(request), {
-        Location: returnTo, 'Set-Cookie': SESSION_COOKIE.replace('SESSION', encodeURIComponent(session))
+        Location: redirect.toString(), 'Set-Cookie': SESSION_COOKIE.replace('SESSION', encodeURIComponent(session))
       })});
+    }
+    if (url.pathname === '/auth/exchange' && request.method === 'POST') {
+      const body = await request.json().catch(() => ({}));
+      const code = typeof body.code === 'string' ? body.code : '';
+      if (!code) return json(request, { error: 'missing_code' }, 400);
+      const session = await env.OAUTH_SESSIONS_KV.get('exchange:' + code);
+      if (!session) return json(request, { error: 'invalid_or_expired_code' }, 401);
+      await env.OAUTH_SESSIONS_KV.delete('exchange:' + code);
+      return json(request, { session });
     }
     if (url.pathname === '/auth/me') {
       const session = await requireSession(request, env);
@@ -128,7 +145,9 @@ export default {
       return json(request, { authenticated: true, login: user.login || null });
     }
     if (url.pathname === '/auth/logout') {
-      const id = cookieValue(request);
+      const auth = request.headers.get('Authorization') || '';
+      const bearer = auth.indexOf('Bearer ') === 0 ? auth.slice(7).trim() : '';
+      const id = bearer || cookieValue(request);
       if (id) await env.OAUTH_SESSIONS_KV.delete('session:' + id);
       return new Response(null, { status: 204, headers: Object.assign(corsHeaders(request), {
         'Set-Cookie': CLEAR_COOKIE

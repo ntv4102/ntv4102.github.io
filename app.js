@@ -85,12 +85,17 @@
   var CACHE_PREFIX = 'knowledge-notes.cache.oauth.';
   var apiBroken = false;
   var authenticated = false;
-  function hasGithubConnection(){ return authenticated; }
+  var sessionKey = 'knowledge-notes.oauth-session';
+  var workerSession = sessionStorage.getItem(sessionKey) || localStorage.getItem(sessionKey) || '';
+  function hasGithubConnection(){ return authenticated && !!workerSession; }
   function cacheKey(name){ return CACHE_PREFIX + name; }
   function readCache(name, fallback){ try { var v=localStorage.getItem(cacheKey(name)); return v===null ? fallback : JSON.parse(v); } catch(e){ return fallback; } }
   function writeCache(name, value){ localStorage.setItem(cacheKey(name), JSON.stringify(value)); }
   async function workerFetch(path, options){
-    var res = await fetch(WORKER_API + path, Object.assign({ credentials:'include' }, options || {}));
+    var requestOptions = Object.assign({ credentials:'include' }, options || {});
+    requestOptions.headers = Object.assign({}, requestOptions.headers || {});
+    if(workerSession) requestOptions.headers.Authorization = 'Bearer ' + workerSession;
+    var res = await fetch(WORKER_API + path, requestOptions);
     if(!res.ok){
       var detail = '';
       try { detail = (await res.text()).slice(0, 180); } catch(e) {}
@@ -100,7 +105,21 @@
     return res;
   }
   var Api = {
-    async getIndex(){ if(!hasGithubConnection()) return readCache('index', []); try { var r=await workerFetch('/index'); var v=await r.json(); writeCache('index',v); return v; } catch(e){ apiBroken=true; return readCache('index',[]); } },
+    async getIndex(){
+      if(!hasGithubConnection()) return readCache('index', []);
+      try {
+        var r = await fetch(WORKER_API + '/index', { credentials:'include' });
+        if(r.status === 404){ apiBroken = false; return []; }
+        if(!r.ok) throw new Error('Worker API ' + r.status);
+        var v = await r.json();
+        apiBroken = false;
+        writeCache('index', v);
+        return v;
+      } catch(e) {
+        apiBroken = true;
+        return readCache('index', []);
+      }
+    },
     async putIndex(arr){ await workerFetch('/index',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(arr)}); writeCache('index',arr); },
     async getNote(id){ if(!hasGithubConnection()) return readCache('note.'+id,null); try { var r=await workerFetch('/notes/'+encodeURIComponent(id)); var v=await r.json(); writeCache('note.'+id,v); return v; } catch(e){ apiBroken=true; return readCache('note.'+id,null); } },
     async putNote(id,data){ await workerFetch('/notes/'+encodeURIComponent(id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); writeCache('note.'+id,data); },
@@ -109,7 +128,11 @@
     async setLast(id){ await workerFetch('/last',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})}); writeCache('last',id); }
   };
   async function loadIndex(){ state.index=await Api.getIndex(); }
-  async function saveIndex(){ await Api.putIndex(state.index); updateStorageStatusUI(); }
+  async function saveIndex(){
+    await Api.putIndex(state.index);
+    apiBroken = false;
+    updateStorageStatusUI();
+  }
   async function loadNote(id){ return await Api.getNote(id); }
   async function saveNote(id,data){ await Api.putNote(id,data); updateStorageStatusUI(); }
   async function deleteNoteStorage(id){ await Api.deleteNote(id); }
@@ -121,8 +144,17 @@
     setReadOnly(!hasGithubConnection() || apiBroken);
   }
   function setReadOnly(readOnly){ els.title.readOnly=readOnly; els.editor.contentEditable=readOnly?'false':'true'; els.toolbar.style.pointerEvents=readOnly?'none':''; els.toolbar.style.opacity=readOnly?'0.55':''; els.newBtn.disabled=readOnly; els.noNoteCreate.disabled=readOnly; }
-  els.githubConnectBtn.addEventListener('click', function(){ location.href=WORKER_API+'/auth/login?return_to='+encodeURIComponent(location.href); });
-  els.githubDisconnectBtn.addEventListener('click', async function(){ try { await fetch(WORKER_API+'/auth/logout',{credentials:'include'}); }catch(e){} authenticated=false; apiBroken=false; updateStorageStatusUI(); renderList(); });
+  els.githubConnectBtn.addEventListener('click', function(){ location.href=WORKER_API+'/auth/login?return_to='+encodeURIComponent(location.href.split('?')[0]); });
+  els.githubDisconnectBtn.addEventListener('click', async function(){
+    try { await workerFetch('/auth/logout', { method:'GET' }); } catch(e) {}
+    sessionStorage.removeItem(sessionKey);
+    localStorage.removeItem(sessionKey);
+    workerSession = '';
+    authenticated = false;
+    apiBroken = false;
+    updateStorageStatusUI();
+    renderList();
+  });
   /* ---------------- rendering sidebar ---------------- */
   function renderList(){
     var q = els.search.value.trim().toLowerCase();
@@ -2359,8 +2391,25 @@
 
   /* ---------------- init ---------------- */
   async function init(){
+    var oauthCode = new URLSearchParams(location.search).get('oauth_code');
+    if(oauthCode){
+      try{
+        var exchanged = await fetch(WORKER_API + '/auth/exchange', {
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({code:oauthCode})
+        });
+        if(!exchanged.ok) throw new Error('OAuth exchange ' + exchanged.status);
+        var exchangeData = await exchanged.json();
+        workerSession = exchangeData.session;
+        localStorage.setItem(sessionKey, workerSession);
+        history.replaceState(null, '', location.pathname + location.hash);
+      }catch(e){
+        console.error('Không thể nhận session OAuth:', e);
+      }
+    }
     try{
-      var me = await fetch(WORKER_API + '/auth/me', { credentials:'include' });
+      var me = await workerFetch('/auth/me');
       authenticated = me.ok;
     }catch(e){ authenticated = false; }
     updateStorageStatusUI();

@@ -2,7 +2,8 @@
 
 Ứng dụng dùng Cloudflare Worker làm proxy OAuth. Người dùng đăng nhập
 GitHub trên trang GitHub; access token chỉ được lưu phía server trong
-Workers KV, trình duyệt chỉ giữ cookie phiên `HttpOnly`.
+Workers KV. App nhận một mã phiên opaque dùng riêng cho Worker, không
+phải GitHub token, để hoạt động ổn định giữa GitHub Pages và Worker.
 
 ## Cấu hình Cloudflare Worker
 
@@ -46,8 +47,8 @@ Sau khi đã tải dữ liệu, app giữ cache cục bộ để xem offline ở
 ## An toàn
 
 - Không còn nhập hoặc lưu GitHub token ở frontend.
-- Cookie phiên dùng `HttpOnly`, `Secure`, `SameSite=None`, `Partitioned`
-  để hoạt động khi app GitHub Pages và Worker ở hai domain khác nhau.
+- Session opaque được lưu ở trình duyệt và gửi qua `Authorization` tới
+  Worker; GitHub token không bao giờ rời khỏi Worker.
 - OAuth state có thời hạn 10 phút.
 - Session Worker có thời hạn 30 ngày.
 - Chỉ cấp quyền repository cần thiết cho OAuth App và giới hạn repository
