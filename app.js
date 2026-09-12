@@ -59,7 +59,7 @@
        worker vào API_BASE bên dưới.
      ========================================================= */
 
-  var API_BASE = 'https://REPLACE-WITH-YOUR-WORKER-URL.workers.dev';
+  var API_BASE = 'https://so-tay-kien-thuc-ap.ntv-4102.workers.dev/';
 
   // Mã không gian dữ liệu mặc định — cố định, không đổi mỗi lần mở.
   // Có thể đổi thành chuỗi khác nếu muốn, nhưng chỉ đổi 1 LẦN DUY NHẤT
