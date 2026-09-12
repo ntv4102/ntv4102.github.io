@@ -27,8 +27,16 @@
 
       <div id="storage-status">
         <div id="storage-status-text">Đang kiểm tra nơi lưu trữ…</div>
-        <button class="foot-btn wide" id="link-folder-btn">Liên kết thư mục lưu trữ…</button>
-        <button class="foot-btn wide" id="grant-again-btn" style="display:none;">Cấp lại quyền truy cập</button>
+
+        <button class="foot-btn wide" id="gh-connect-btn">🔗 Kết nối GitHub để đồng bộ…</button>
+        <button class="foot-btn wide" id="gh-manage-btn" style="display:none;">⚙ Quản lý kết nối GitHub…</button>
+        <button class="foot-btn wide" id="gh-resync-btn" style="display:none;">⟳ Đồng bộ lại ngay</button>
+
+        <details id="fs-alt-wrap">
+          <summary>Hoặc lưu vào thư mục trên máy (không đồng bộ nhiều thiết bị)</summary>
+          <button class="foot-btn wide" id="link-folder-btn">Liên kết thư mục lưu trữ…</button>
+          <button class="foot-btn wide" id="grant-again-btn" style="display:none;">Cấp lại quyền truy cập</button>
+        </details>
       </div>
 
       <div id="sidebar-foot">
@@ -102,6 +110,45 @@
       <div class="modal-btns">
         <button class="btn-cancel" id="modal-cancel">Huỷ</button>
         <button class="btn-danger" id="modal-ok">Xoá</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="gh-modal-bg">
+    <div id="gh-modal">
+      <h3>Kết nối GitHub để đồng bộ</h3>
+      <p class="gh-modal-desc">
+        Ghi chú sẽ được lưu thành các file <code>.json</code> thật bên trong một kho (repo) GitHub —
+        nhờ vậy bạn mở được từ bất kỳ máy tính / điện thoại nào và luôn có lịch sử chỉnh sửa.
+        Nên dùng một <b>repo riêng tư (private)</b> để nội dung sổ tay không bị công khai
+        (repo này có thể khác với repo đang chạy trang GitHub Pages).
+      </p>
+
+      <label for="gh-repo-input">Chủ sở hữu/tên kho (owner/repo)</label>
+      <input type="text" id="gh-repo-input" placeholder="vd: nguyenvana/so-tay-du-lieu" autocomplete="off">
+
+      <label for="gh-branch-input">Nhánh (branch)</label>
+      <input type="text" id="gh-branch-input" placeholder="main" autocomplete="off">
+
+      <label for="gh-path-input">Thư mục lưu dữ liệu trong kho</label>
+      <input type="text" id="gh-path-input" placeholder="data" autocomplete="off">
+
+      <label for="gh-token-input">Personal Access Token (fine-grained)</label>
+      <input type="password" id="gh-token-input" placeholder="github_pat_..." autocomplete="off">
+
+      <p class="gh-modal-hint">
+        Tạo tại GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens.
+        Chỉ cấp quyền <b>Contents: Read and write</b> trên đúng repo bạn nhập ở trên.
+        Token được lưu <b>trên trình duyệt này</b> và chỉ gửi tới api.github.com.
+      </p>
+
+      <p id="gh-modal-error" class="gh-modal-error" style="display:none;"></p>
+      <p id="gh-modal-status" class="gh-modal-status" style="display:none;"></p>
+
+      <div class="modal-btns">
+        <button class="btn-cancel" id="gh-modal-cancel">Huỷ</button>
+        <button class="btn-danger" id="gh-modal-disconnect" style="display:none;">Ngắt kết nối</button>
+        <button class="btn-confirm" id="gh-modal-connect">Kết nối</button>
       </div>
     </div>
   </div>

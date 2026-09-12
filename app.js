@@ -31,7 +31,20 @@
     modalCancel: document.getElementById('modal-cancel'),
     storageStatusText: document.getElementById('storage-status-text'),
     linkFolderBtn: document.getElementById('link-folder-btn'),
-    grantAgainBtn: document.getElementById('grant-again-btn')
+    grantAgainBtn: document.getElementById('grant-again-btn'),
+    ghConnectBtn: document.getElementById('gh-connect-btn'),
+    ghManageBtn: document.getElementById('gh-manage-btn'),
+    ghResyncBtn: document.getElementById('gh-resync-btn'),
+    ghModalBg: document.getElementById('gh-modal-bg'),
+    ghRepoInput: document.getElementById('gh-repo-input'),
+    ghBranchInput: document.getElementById('gh-branch-input'),
+    ghPathInput: document.getElementById('gh-path-input'),
+    ghTokenInput: document.getElementById('gh-token-input'),
+    ghModalError: document.getElementById('gh-modal-error'),
+    ghModalStatus: document.getElementById('gh-modal-status'),
+    ghModalCancel: document.getElementById('gh-modal-cancel'),
+    ghModalConnect: document.getElementById('gh-modal-connect'),
+    ghModalDisconnect: document.getElementById('gh-modal-disconnect')
   };
 
   var state = { index: [], currentId: null, saveTimer: null, dirty: false, isSaving: false, lastTableCell: null, selectedCells: [] };
@@ -174,55 +187,380 @@
     }catch(e){ return null; }
   }
 
-  /* ---- lớp lưu trữ tổng (routing) ---- */
-  async function readNoteRaw(id){ // luôn đọc từ cloud/localStorage, bỏ qua FS
+  /* =========================================================
+     ĐỒNG BỘ GITHUB
+     GitHub Pages là hosting tĩnh, không có backend, nên không có
+     nơi nào lưu dữ liệu dùng chung cho nhiều thiết bị. Lớp GH bên
+     dưới dùng chính GitHub REST API (Contents API) để đọc/ghi các
+     file .json thật vào một repo do người dùng chỉ định — nhờ vậy
+     dữ liệu đồng bộ được giữa nhiều máy/điện thoại và có lịch sử
+     chỉnh sửa (mỗi lần lưu là một commit).
+     ========================================================= */
+  var GH_CONFIG_KEY = 'kb:gh-config';
+
+  function b64EncodeUnicode(str){
+    var bytes = new TextEncoder().encode(str);
+    var binary = '';
+    for(var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary);
+  }
+  function b64DecodeUnicode(b64){
+    var binary = atob(b64.replace(/\n/g, ''));
+    var bytes = new Uint8Array(binary.length);
+    for(var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+
+  var GH = {
+    configured: false,   // đã nhập cấu hình (owner/repo/token) hay chưa
+    active: false,       // cấu hình hợp lệ và đang dùng làm nơi lưu chính
+    owner: '', repo: '', branch: 'main', token: '', path: 'data',
+    shaCache: {},
+    lastError: '',
+
+    loadConfig(){
+      try{
+        var raw = localStorage.getItem(GH_CONFIG_KEY);
+        if(!raw) return false;
+        var cfg = JSON.parse(raw);
+        GH.owner = cfg.owner || ''; GH.repo = cfg.repo || '';
+        GH.branch = cfg.branch || 'main'; GH.path = cfg.path || 'data';
+        GH.token = cfg.token || '';
+        GH.configured = !!(GH.owner && GH.repo && GH.token);
+        return GH.configured;
+      }catch(e){ return false; }
+    },
+    saveConfig(){
+      try{
+        localStorage.setItem(GH_CONFIG_KEY, JSON.stringify({
+          owner: GH.owner, repo: GH.repo, branch: GH.branch, path: GH.path, token: GH.token
+        }));
+      }catch(e){}
+    },
+    clearConfig(){
+      try{ localStorage.removeItem(GH_CONFIG_KEY); }catch(e){}
+      GH.configured = false; GH.active = false; GH.shaCache = {};
+    },
+    fullPath(p){
+      var base = (GH.path || '').replace(/^\/+|\/+$/g, '');
+      return base ? (base + '/' + p) : p;
+    },
+    contentsUrl(p){
+      var encoded = GH.fullPath(p).split('/').map(encodeURIComponent).join('/');
+      return 'https://api.github.com/repos/' + GH.owner + '/' + GH.repo + '/contents/' + encoded;
+    },
+    headers(){
+      return {
+        'Authorization': 'Bearer ' + GH.token,
+        'Accept': 'application/vnd.github+json'
+      };
+    },
+    markError(err, deactivate){
+      GH.lastError = (err && err.message) || String(err);
+      if(deactivate) GH.active = false;
+      updateStorageStatusUI();
+    },
+    async testConnection(owner, repo, branch, token){
+      var res = await fetch('https://api.github.com/repos/' + owner + '/' + repo, {
+        headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' }
+      });
+      if(res.status === 401 || res.status === 403) throw new Error('Token không hợp lệ hoặc không đủ quyền.');
+      if(res.status === 404) throw new Error('Không tìm thấy repo, hoặc token chưa được cấp quyền vào repo này.');
+      if(!res.ok) throw new Error('Không kết nối được tới GitHub (mã lỗi ' + res.status + ').');
+      var json = await res.json();
+      if(branch){
+        var bres = await fetch('https://api.github.com/repos/' + owner + '/' + repo + '/branches/' + encodeURIComponent(branch), {
+          headers: { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' }
+        });
+        if(bres.status === 404) throw new Error('Nhánh "' + branch + '" không tồn tại trong repo.');
+      }
+      return json;
+    },
+    async getFile(p){
+      var url = GH.contentsUrl(p) + '?ref=' + encodeURIComponent(GH.branch) + '&_=' + Date.now();
+      var res;
+      try{ res = await fetch(url, { headers: GH.headers() }); }
+      catch(e){ throw new Error('offline'); }
+      if(res.status === 404){ delete GH.shaCache[p]; return null; }
+      if(res.status === 401 || res.status === 403) throw new Error('gh-auth:' + res.status);
+      if(!res.ok) throw new Error('gh-get:' + res.status);
+      var json = await res.json();
+      GH.shaCache[p] = json.sha;
+      if(json.encoding === 'base64') return b64DecodeUnicode(json.content);
+      return json.content;
+    },
+    async putFile(p, content, message){
+      var url = GH.contentsUrl(p);
+      var body = {
+        message: message || ('Cập nhật ' + p),
+        content: b64EncodeUnicode(content),
+        branch: GH.branch
+      };
+      if(GH.shaCache[p]) body.sha = GH.shaCache[p];
+      var res;
+      try{
+        res = await fetch(url, {
+          method: 'PUT',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, GH.headers()),
+          body: JSON.stringify(body)
+        });
+      }catch(e){ throw new Error('offline'); }
+      if(res.status === 409 || res.status === 422){
+        // sha lệch (đã bị sửa từ nơi khác) -> lấy sha mới nhất rồi thử lại 1 lần
+        try{ await GH.getFile(p); }catch(e){}
+        if(GH.shaCache[p]) body.sha = GH.shaCache[p]; else delete body.sha;
+        res = await fetch(url, {
+          method: 'PUT',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, GH.headers()),
+          body: JSON.stringify(body)
+        });
+      }
+      if(res.status === 401 || res.status === 403) throw new Error('gh-auth:' + res.status);
+      if(!res.ok) throw new Error('gh-put:' + res.status);
+      var json = await res.json();
+      GH.shaCache[p] = json.content.sha;
+      return json;
+    },
+    async deleteFile(p, message){
+      if(!GH.shaCache[p]){
+        try{ await GH.getFile(p); }catch(e){}
+        if(!GH.shaCache[p]) return;
+      }
+      var url = GH.contentsUrl(p);
+      var res;
+      try{
+        res = await fetch(url, {
+          method: 'DELETE',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, GH.headers()),
+          body: JSON.stringify({ message: message || ('Xoá ' + p), sha: GH.shaCache[p], branch: GH.branch })
+        });
+      }catch(e){ throw new Error('offline'); }
+      if(res.status === 401 || res.status === 403) throw new Error('gh-auth:' + res.status);
+      if(res.ok) delete GH.shaCache[p];
+    },
+    // Thử kết nối lại bằng cấu hình đã lưu, âm thầm khi khởi động trang
+    async restoreSilently(){
+      if(!GH.loadConfig()) return;
+      try{
+        await GH.testConnection(GH.owner, GH.repo, GH.branch, GH.token);
+        GH.active = true;
+        GH.lastError = '';
+      }catch(e){
+        GH.active = false;
+        GH.lastError = e.message || 'Không kết nối được tới GitHub.';
+      }
+    }
+  };
+
+  /* ---- lớp lưu trữ tổng (routing) ----
+     Thứ tự ưu tiên: GitHub (đồng bộ nhiều thiết bị) > thư mục trên máy (FS)
+     > localStorage. Dù backend chính là gì, mỗi lần lưu đều ghi thêm 1 bản
+     sao vào localStorage để phòng khi mất mạng / GitHub lỗi, tránh mất dữ liệu. */
+  async function readNoteRaw(id){ // đọc bản sao trong localStorage
     var raw = await Store.get(NOTE_KEY(id));
     try{ return raw ? JSON.parse(raw) : null; }catch(e){ return null; }
   }
   async function loadIndex(){
+    if(GH.active){
+      try{
+        var raw = await GH.getFile('index.json');
+        state.index = raw ? JSON.parse(raw) : [];
+        return;
+      }catch(e){ GH.markError(e, /(^|:)(401|403)$/.test(e.message)); }
+    }
     if(FS.active){ state.index = await FS.readIndex(); return; }
-    var raw = await Store.get(INDEX_KEY);
-    try{ state.index = raw ? JSON.parse(raw) : []; }catch(e){ state.index = []; }
+    var raw2 = await Store.get(INDEX_KEY);
+    try{ state.index = raw2 ? JSON.parse(raw2) : []; }catch(e){ state.index = []; }
   }
   async function saveIndex(){
-    if(FS.active){ await FS.writeIndex(state.index); return; }
-    await Store.set(INDEX_KEY, JSON.stringify(state.index));
+    var json = JSON.stringify(state.index);
+    var done = false;
+    if(GH.active){
+      try{ await GH.putFile('index.json', JSON.stringify(state.index, null, 2), 'Cập nhật danh mục chủ đề'); done = true; }
+      catch(e){ GH.markError(e, /(^|:)(401|403)$/.test(e.message)); }
+    }
+    if(!done && FS.active){
+      try{ await FS.writeIndex(state.index); done = true; }catch(e){}
+    }
+    await Store.set(INDEX_KEY, json); // bản sao dự phòng cục bộ
   }
   async function loadNote(id){
-    if(FS.active) return await FS.readNote(id);
+    if(GH.active){
+      try{
+        var raw = await GH.getFile('notes/' + id + '.json');
+        if(raw) return JSON.parse(raw);
+      }catch(e){ GH.markError(e, /(^|:)(401|403)$/.test(e.message)); }
+    }
+    if(FS.active){
+      var d = await FS.readNote(id);
+      if(d) return d;
+    }
     return await readNoteRaw(id);
   }
   async function saveNote(id, data){
-    if(FS.active){ await FS.writeNote(id, data); return; }
-    await Store.set(NOTE_KEY(id), JSON.stringify(data));
+    var json = JSON.stringify(data, null, 2);
+    var done = false;
+    if(GH.active){
+      try{ await GH.putFile('notes/' + id + '.json', json, 'Cập nhật chủ đề: ' + (data.title || id)); done = true; }
+      catch(e){ GH.markError(e, /(^|:)(401|403)$/.test(e.message)); }
+    }
+    if(!done && FS.active){
+      try{ await FS.writeNote(id, data); done = true; }catch(e){}
+    }
+    await Store.set(NOTE_KEY(id), json); // bản sao dự phòng cục bộ
   }
   async function deleteNoteStorage(id){
-    if(FS.active){ await FS.deleteNote(id); return; }
+    if(GH.active){
+      try{ await GH.deleteFile('notes/' + id + '.json', 'Xoá chủ đề ' + id); }
+      catch(e){ GH.markError(e, /(^|:)(401|403)$/.test(e.message)); }
+    }
+    if(FS.active){ await FS.deleteNote(id); }
     await Store.del(NOTE_KEY(id));
   }
 
   function updateStorageStatusUI(){
     var t = els.storageStatusText;
-    if(FS.active){
-      t.textContent = 'Đang lưu vào thư mục trên máy — mỗi chủ đề là 1 file .json trong thư mục "notes/".';
+
+    if(GH.active){
+      t.textContent = 'Đang đồng bộ với GitHub (' + GH.owner + '/' + GH.repo + ') — mỗi lần lưu là một commit, mở được từ mọi thiết bị.';
+      els.ghConnectBtn.style.display = 'none';
+      els.ghManageBtn.style.display = '';
+      els.ghResyncBtn.style.display = 'none';
+    } else if(GH.configured){
+      t.textContent = 'Không kết nối được tới GitHub (' + (GH.lastError || 'lỗi không xác định') + '). Đang tạm dùng bản sao cục bộ trong trình duyệt; hãy đồng bộ lại khi có mạng.';
+      els.ghConnectBtn.style.display = 'none';
+      els.ghManageBtn.style.display = '';
+      els.ghResyncBtn.style.display = '';
+    } else {
+      els.ghConnectBtn.style.display = '';
+      els.ghManageBtn.style.display = 'none';
+      els.ghResyncBtn.style.display = 'none';
+
+      if(FS.active){
+        t.textContent = 'Đang lưu vào thư mục trên máy — mỗi chủ đề là 1 file .json trong thư mục "notes/". Kết nối GitHub ở trên để đồng bộ thêm nhiều thiết bị.';
+      } else if(FS.pendingHandle){
+        t.textContent = 'Thư mục lưu trữ đã liên kết trước đó — trình duyệt cần bạn cấp lại quyền truy cập.';
+      } else {
+        t.textContent = 'Đang lưu tạm trong trình duyệt này (localStorage) — sẽ mất nếu xoá dữ liệu duyệt web, và không đồng bộ giữa các thiết bị. Nên kết nối GitHub ở trên.';
+      }
+    }
+
+    if(FS.pendingHandle && !GH.active){
+      els.linkFolderBtn.style.display = 'none';
+      els.grantAgainBtn.style.display = '';
+    } else if(FS.active){
       els.linkFolderBtn.textContent = 'Đổi sang thư mục khác…';
       els.linkFolderBtn.style.display = '';
       els.grantAgainBtn.style.display = 'none';
-    } else if(FS.pendingHandle){
-      t.textContent = 'Thư mục lưu trữ đã liên kết trước đó — trình duyệt cần bạn cấp lại quyền truy cập.';
-      els.linkFolderBtn.style.display = 'none';
-      els.grantAgainBtn.style.display = '';
     } else if(!FS.supported){
-      t.textContent = 'Đang lưu trong trình duyệt này (localStorage). Trình duyệt hiện tại chưa hỗ trợ lưu ra thư mục thật — hãy dùng Chrome hoặc Edge trên máy tính.';
       els.linkFolderBtn.style.display = 'none';
       els.grantAgainBtn.style.display = 'none';
     } else {
-      t.textContent = 'Đang lưu trong trình duyệt (localStorage). Liên kết một thư mục để mỗi chủ đề được lưu thành 1 file .json thật, dễ quản lý và sao lưu.';
       els.linkFolderBtn.textContent = 'Liên kết thư mục lưu trữ…';
       els.linkFolderBtn.style.display = '';
       els.grantAgainBtn.style.display = 'none';
     }
   }
+
+  /* ---------------- modal kết nối GitHub ---------------- */
+  function openGhModal(){
+    els.ghModalError.style.display = 'none';
+    els.ghModalStatus.style.display = 'none';
+    els.ghRepoInput.value = GH.owner && GH.repo ? (GH.owner + '/' + GH.repo) : '';
+    els.ghBranchInput.value = GH.branch || 'main';
+    els.ghPathInput.value = GH.path || 'data';
+    els.ghTokenInput.value = GH.token || '';
+    els.ghModalDisconnect.style.display = GH.configured ? '' : 'none';
+    els.ghModalBg.classList.add('show');
+  }
+  function closeGhModal(){ els.ghModalBg.classList.remove('show'); }
+
+  els.ghConnectBtn.addEventListener('click', openGhModal);
+  els.ghManageBtn.addEventListener('click', openGhModal);
+  els.ghModalCancel.addEventListener('click', closeGhModal);
+  els.ghModalBg.addEventListener('click', function(ev){ if(ev.target === els.ghModalBg) closeGhModal(); });
+
+  els.ghModalDisconnect.addEventListener('click', function(){
+    GH.clearConfig();
+    closeGhModal();
+    updateStorageStatusUI();
+  });
+
+  els.ghResyncBtn.addEventListener('click', async function(){
+    els.ghResyncBtn.textContent = 'Đang thử lại…';
+    await GH.restoreSilently();
+    updateStorageStatusUI();
+    if(GH.active){
+      await loadIndex();
+      renderList();
+      if(state.currentId) await openNote(state.currentId);
+    }
+    els.ghResyncBtn.textContent = '⟳ Đồng bộ lại ngay';
+  });
+
+  els.ghModalConnect.addEventListener('click', async function(){
+    var repoRaw = els.ghRepoInput.value.trim();
+    var branch = els.ghBranchInput.value.trim() || 'main';
+    var path = els.ghPathInput.value.trim() || 'data';
+    var token = els.ghTokenInput.value.trim();
+
+    els.ghModalError.style.display = 'none';
+    els.ghModalStatus.style.display = 'none';
+
+    var parts = repoRaw.split('/').map(function(s){ return s.trim(); }).filter(Boolean);
+    if(parts.length !== 2 || !token){
+      els.ghModalError.textContent = 'Vui lòng nhập đủ "owner/repo" và Personal Access Token.';
+      els.ghModalError.style.display = '';
+      return;
+    }
+    var owner = parts[0], repo = parts[1];
+
+    els.ghModalConnect.disabled = true;
+    els.ghModalConnect.textContent = 'Đang kiểm tra…';
+    try{
+      await GH.testConnection(owner, repo, branch, token);
+
+      GH.owner = owner; GH.repo = repo; GH.branch = branch; GH.path = path; GH.token = token;
+      GH.saveConfig();
+      GH.configured = true;
+      GH.active = true;
+      GH.shaCache = {};
+
+      // Kiểm tra repo đã có dữ liệu chưa; nếu chưa và máy hiện có sẵn ghi
+      // chú (từ localStorage / thư mục cũ) thì đẩy toàn bộ lên GitHub.
+      var remoteIndexRaw = null;
+      try{ remoteIndexRaw = await GH.getFile('index.json'); }catch(e){ /* coi như chưa có */ }
+
+      if(remoteIndexRaw){
+        state.index = JSON.parse(remoteIndexRaw) || [];
+      } else if(state.index.length){
+        els.ghModalStatus.textContent = 'Đang tải ' + state.index.length + ' chủ đề hiện có lên GitHub…';
+        els.ghModalStatus.style.display = '';
+        for(var i = 0; i < state.index.length; i++){
+          var nid = state.index[i].id;
+          var ndata = await loadNote(nid) || await readNoteRaw(nid);
+          if(ndata) await GH.putFile('notes/' + nid + '.json', JSON.stringify(ndata, null, 2), 'Nhập chủ đề: ' + (ndata.title || nid));
+        }
+        await GH.putFile('index.json', JSON.stringify(state.index, null, 2), 'Khởi tạo danh mục chủ đề');
+      } else {
+        await GH.putFile('index.json', JSON.stringify([], null, 2), 'Khởi tạo danh mục chủ đề');
+      }
+
+      updateStorageStatusUI();
+      closeGhModal();
+      renderList();
+      if(state.index.length){
+        var target = state.index.find(function(n){ return n.id === state.currentId; }) || state.index[0];
+        await openNote(target.id);
+      }
+    }catch(e){
+      els.ghModalError.textContent = e.message || 'Không kết nối được tới GitHub.';
+      els.ghModalError.style.display = '';
+    }finally{
+      els.ghModalConnect.disabled = false;
+      els.ghModalConnect.textContent = 'Kết nối';
+    }
+  });
 
   els.linkFolderBtn.addEventListener('click', async function(){
     if(!FS.supported){
@@ -1954,6 +2292,7 @@
   /* ---------------- init ---------------- */
   async function init(){
     await FS.restoreSilently();
+    await GH.restoreSilently();
     updateStorageStatusUI();
     await loadIndex();
     if(state.index.length === 0){
