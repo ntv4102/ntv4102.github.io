@@ -41,6 +41,17 @@
     els.sidebarToggle.setAttribute('aria-label', open ? 'Đóng danh sách chủ đề' : 'Mở danh sách chủ đề');
   }
 
+  function getPreviousOrderedList(node, alpha){
+    var previous = null;
+    Array.prototype.forEach.call(els.editor.querySelectorAll('ol'), function(candidate){
+      if(isAlphaOrderedList(candidate) === alpha &&
+        (candidate.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)){
+        previous = candidate;
+      }
+    });
+    return previous;
+  }
+
   function uid(){ return 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
   function fmtTime(ts){
     var d = new Date(ts);
@@ -257,11 +268,13 @@
     els.title.value = data.title || '';
     els.editor.innerHTML = data.html || '';
     upgradeTables(els.editor);
+    var normalizedListState = normalizeOrderedListNumbering();
     var meta = state.index.find(function(n){ return n.id === id; });
     els.updatedAt.textContent = meta ? ('Cập nhật ' + fmtTime(meta.updatedAt)) : '';
     els.saveState.textContent = '';
     els.saveState.title = '';
     els.saveState.classList.remove('saving', 'dirty');
+    if(normalizedListState) scheduleSave();
     els.noNote.style.display = 'none';
     els.noteView.style.display = 'flex';
     Api.setLast(id);
@@ -706,12 +719,12 @@
     return false;
   }
 
-  function convertHeadingToOrderedList(){
+  function convertBlockToOrderedList(){
     var sel = window.getSelection();
     if(!sel || sel.rangeCount === 0) return false;
 
     var block = getEditableBlock(sel.anchorNode);
-    if(!block || !block.matches('h1, h2, h3')) return false;
+    if(!block || block.matches('li') || block.closest('ol')) return false;
 
     var list = block.closest('ol');
     if(list && els.editor.contains(list)) return false;
@@ -720,19 +733,6 @@
     item.innerHTML = block.innerHTML || '<br>';
 
     var orderedList = document.createElement('ol');
-    var previous = null;
-    Array.prototype.forEach.call(els.editor.querySelectorAll('ol'), function(candidate){
-      if(candidate !== orderedList &&
-        (candidate.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING)){
-        previous = candidate;
-      }
-    });
-    if(previous){
-      var previousStart = parseInt(previous.getAttribute('start'), 10);
-      if(!Number.isFinite(previousStart)) previousStart = 1;
-      var nextStart = previousStart + previous.children.length;
-      if(nextStart > 1) orderedList.setAttribute('start', nextStart);
-    }
     orderedList.appendChild(item);
     block.parentNode.insertBefore(orderedList, block);
     block.remove();
@@ -749,14 +749,7 @@
     lists.forEach(function(list){
       if(existingLists.indexOf(list) !== -1 || list.hasAttribute('start')) return;
 
-      var previous = null;
-      Array.prototype.forEach.call(els.editor.querySelectorAll('ol'), function(candidate){
-        if(candidate !== list &&
-          !candidate.contains(list) &&
-          (candidate.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING)){
-          previous = candidate;
-        }
-      });
+      var previous = getPreviousOrderedList(list, false);
       if(!previous) return;
 
       var previousStart = parseInt(previous.getAttribute('start'), 10);
@@ -874,6 +867,96 @@
   }
 
   /* ---------------- xử lý danh sách chữ abc / số / chấm ---------------- */
+  function isAlphaOrderedList(list){
+    var type = list.getAttribute('type');
+    return type === 'a' || type === 'A';
+  }
+
+  function convertSelectedAlphaItemToNumberedList(){
+    var sel = window.getSelection();
+    if(!sel || sel.rangeCount === 0) return false;
+
+    var startBlock = getEditableBlock(sel.getRangeAt(0).startContainer);
+    var endBlock = getEditableBlock(sel.getRangeAt(0).endContainer);
+    if(!startBlock || startBlock !== endBlock || !startBlock.matches('li')) return false;
+
+    var sourceList = startBlock.closest('ol');
+    if(!sourceList || !isAlphaOrderedList(sourceList)) return false;
+
+    var items = Array.prototype.slice.call(sourceList.children);
+    var selectedIndex = items.indexOf(startBlock);
+    if(selectedIndex < 0) return false;
+
+    var numberedList = document.createElement('ol');
+    var previousNumeric = getPreviousOrderedList(sourceList, false);
+    if(previousNumeric){
+      var previousStart = parseInt(previousNumeric.getAttribute('start'), 10);
+      if(!Number.isFinite(previousStart)) previousStart = 1;
+      numberedList.setAttribute('start', previousStart + previousNumeric.children.length);
+    }
+    numberedList.appendChild(startBlock.cloneNode(true));
+
+    var replacement = [];
+    if(selectedIndex > 0){
+      var beforeList = sourceList.cloneNode(false);
+      items.slice(0, selectedIndex).forEach(function(item){
+        beforeList.appendChild(item.cloneNode(true));
+      });
+      replacement.push(beforeList);
+    }
+
+    replacement.push(numberedList);
+
+    if(selectedIndex < items.length - 1){
+      var afterList = sourceList.cloneNode(false);
+      afterList.removeAttribute('start');
+      items.slice(selectedIndex + 1).forEach(function(item){
+        afterList.appendChild(item.cloneNode(true));
+      });
+      replacement.push(afterList);
+    }
+
+    replacement.forEach(function(node){
+      sourceList.parentNode.insertBefore(node, sourceList);
+    });
+    sourceList.remove();
+    normalizeOrderedListNumbering();
+
+    var newItem = numberedList.firstElementChild;
+    var range = document.createRange();
+    range.selectNodeContents(newItem);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return true;
+  }
+
+  function normalizeOrderedListNumbering(){
+    var lists = Array.prototype.slice.call(els.editor.querySelectorAll('ol'));
+    var changed = false;
+    var numericPosition = 1;
+    lists.forEach(function(list){
+      if(isAlphaOrderedList(list)){
+        if(list.hasAttribute('start')){
+          list.removeAttribute('start');
+          changed = true;
+        }
+        return;
+      }
+
+      if(numericPosition === 1){
+        if(list.hasAttribute('start')){
+          list.removeAttribute('start');
+          changed = true;
+        }
+      } else if(list.getAttribute('start') !== String(numericPosition)){
+        list.setAttribute('start', numericPosition);
+        changed = true;
+      }
+      numericPosition += list.children.length;
+    });
+    return changed;
+  }
+
   function getSelectedOls(){
     var sel = window.getSelection();
     if(!sel || sel.rangeCount === 0) return [];
@@ -896,7 +979,7 @@
 
   function getNextAlphaStart(list){
     var previousAlpha = null;
-    var allOls = els.editor.querySelectorAll('ol[type="a"]');
+    var allOls = Array.prototype.filter.call(els.editor.querySelectorAll('ol'), isAlphaOrderedList);
     Array.prototype.forEach.call(allOls, function(ol){
       if(ol !== list && (!list || !!(ol.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING))){
         previousAlpha = ol;
@@ -912,16 +995,14 @@
   function continueAlphaLists(lists){
     lists.forEach(function(ol){
       ol.setAttribute('type', 'a');
-      var nextStart = getNextAlphaStart(ol);
-      if(nextStart > 1) ol.setAttribute('start', nextStart);
-      else ol.removeAttribute('start');
+      ol.removeAttribute('start');
     });
   }
 
   function toggleAlphaList(){
     ensureEditableFocus();
     var ols = getSelectedOls();
-    var allAlpha = ols.length > 0 && ols.every(function(ol){ return ol.getAttribute('type') === 'a'; });
+    var allAlpha = ols.length > 0 && ols.every(isAlphaOrderedList);
 
     if(allAlpha){
       // Đang là danh sách chữ abc -> bấm lại nút để huỷ danh sách, đưa về đoạn văn thường
@@ -955,7 +1036,7 @@
   function updateToolbarState(){
     if(!els.editor) return;
     var ols = getSelectedOls();
-    var hasAlpha = ols.length > 0 && ols.some(function(ol){ return ol.getAttribute('type') === 'a'; });
+    var hasAlpha = ols.length > 0 && ols.some(isAlphaOrderedList);
     var hasNumeric = ols.length > 0 && ols.some(function(ol){ return !ol.getAttribute('type') || ol.getAttribute('type') === '1'; });
 
     if(els.btnListAlpha){
@@ -1048,14 +1129,17 @@
       toggleAlphaList();
       return;
     } else if(btn.dataset.cmd === 'insertOrderedList'){
-      if(convertHeadingToOrderedList() || insertNewBlockForFormat('ol', true)){
+      if(convertSelectedAlphaItemToNumberedList() ||
+        convertBlockToOrderedList() ||
+        insertNewBlockForFormat('ol', true)){
+        normalizeOrderedListNumbering();
         scheduleSave();
         updateToolbarState();
         return;
       }
       normalizeSelectionForBlockCommand();
       var ols = getSelectedOls();
-      var hasAlpha = ols.length > 0 && ols.some(function(ol){ return ol.getAttribute('type') === 'a'; });
+      var hasAlpha = ols.length > 0 && ols.some(isAlphaOrderedList);
       if(hasAlpha){
         // Đang là danh sách abc mà bấm nút 1. -> chuyển thành danh sách số
         ols.forEach(function(ol){
@@ -1066,6 +1150,7 @@
         document.execCommand('insertOrderedList', false, null);
         continueOrderedListNumbering(getSelectedOls(), existingOls);
       }
+      normalizeOrderedListNumbering();
     } else if(btn.dataset.cmd === 'insertUnorderedList'){
       if(insertNewBlockForFormat('ul', true)){
         scheduleSave();
