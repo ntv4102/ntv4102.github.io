@@ -1894,6 +1894,33 @@
   els.newBtn.addEventListener('click', function(){ createNote(); });
   els.noNoteCreate.addEventListener('click', function(){ createNote(); });
 
+  /* Prevent iOS from zooming focused fields without changing their visual font size. */
+  function installMobileFocusZoomGuard(){
+    if(!window.matchMedia('(max-width: 760px)').matches) return;
+    var viewport = document.querySelector('meta[name="viewport"]');
+    if(!viewport) return;
+    var originalContent = viewport.getAttribute('content') || '';
+    var focusedEditable = null;
+
+    document.addEventListener('focusin', function(event){
+      var target = event.target;
+      if(!(target instanceof Element)) return;
+      var editable = target.closest('input:not([type="file"]), textarea, [contenteditable="true"]');
+      if(!editable) return;
+      focusedEditable = editable;
+      viewport.setAttribute('content', originalContent + ', maximum-scale=1');
+    });
+
+    document.addEventListener('focusout', function(event){
+      var target = event.target;
+      if(!(target instanceof Element) || target.closest('input:not([type="file"]), textarea, [contenteditable="true"]') !== focusedEditable) return;
+      focusedEditable = null;
+      viewport.setAttribute('content', originalContent);
+    });
+  }
+
+  installMobileFocusZoomGuard();
+
   /* ---------------- ghi chú hướng dẫn mẫu ---------------- */
   function guideHTML(){
     return '<h2>Chào mừng bạn!</h2>' +
