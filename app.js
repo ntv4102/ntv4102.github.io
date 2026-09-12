@@ -26,8 +26,32 @@
     modalOk: document.getElementById('modal-ok'),
     modalCancel: document.getElementById('modal-cancel'),
     storageStatusText: document.getElementById('storage-status-text'),
-    copyLinkBtn: document.getElementById('copy-link-btn')
+    copyLinkBtn: document.getElementById('copy-link-btn'),
+    sidebarToggle: document.getElementById('sidebar-toggle'),
+    sidebarClose: document.getElementById('sidebar-close'),
+    sidebarBackdrop: document.getElementById('sidebar-backdrop')
   };
+
+  /* ---------------- mobile sidebar (off-canvas) ---------------- */
+  function openSidebarMobile(){ document.getElementById('app').classList.add('sidebar-open'); }
+  function closeSidebarMobile(){ document.getElementById('app').classList.remove('sidebar-open'); }
+  if(els.sidebarToggle) els.sidebarToggle.addEventListener('click', openSidebarMobile);
+  if(els.sidebarClose) els.sidebarClose.addEventListener('click', closeSidebarMobile);
+  if(els.sidebarBackdrop) els.sidebarBackdrop.addEventListener('click', closeSidebarMobile);
+  document.addEventListener('keydown', function(ev){
+    if(ev.key === 'Escape') closeSidebarMobile();
+  });
+
+  /* replay the note-view entrance animation (header/toolbar/editor fade-up)
+     every time a note is opened, by forcing a reflow between the class
+     removal and re-addition */
+  function replayNoteEnterAnim(){
+    var el = els.noteView;
+    if(!el) return;
+    el.classList.remove('kb-note-enter');
+    void el.offsetWidth; /* force reflow */
+    el.classList.add('kb-note-enter');
+  }
 
   var state = { index: [], currentId: null, saveTimer: null, dirty: false, isSaving: false, lastTableCell: null, selectedCells: [] };
 
@@ -210,10 +234,11 @@
       els.list.appendChild(empty);
       return;
     }
-    items.forEach(function(n){
+    items.forEach(function(n, i){
       var row = document.createElement('div');
       row.className = 'note-item' + (n.id === state.currentId ? ' active' : '');
       row.dataset.id = n.id;
+      row.style.setProperty('--i', i);
 
       var main = document.createElement('div');
       main.className = 'ni-main';
@@ -254,9 +279,11 @@
     els.saveState.classList.remove('saving', 'dirty');
     els.noNote.style.display = 'none';
     els.noteView.style.display = 'flex';
+    replayNoteEnterAnim();
     Api.setLast(id);
     renderList();
     updateToolbarState();
+    if(window.innerWidth <= 760) closeSidebarMobile();
   }
 
   async function createNote(prefill){

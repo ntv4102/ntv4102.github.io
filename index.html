@@ -15,9 +15,12 @@
 <body>
   <div id="app">
 
+    <div id="sidebar-backdrop"></div>
+
     <aside id="sidebar">
       <div id="brand">
         <div class="mark">ABC</div>
+        <button id="sidebar-close" aria-label="Đóng menu">✕</button>
       </div>
       <div id="search-wrap">
         <input id="search" type="text" placeholder="Tìm chủ đề…">
@@ -38,6 +41,11 @@
     </aside>
 
     <main id="main">
+      <div id="mobile-topbar">
+        <button id="sidebar-toggle" aria-label="Mở menu">☰</button>
+        <div id="mobile-topbar-title">Võ Lâm Mật Tịch</div>
+      </div>
+
       <div id="no-note" style="display:none;">
         <div class="serif">Chưa có chủ đề nào được chọn</div>
         <div>Chọn một chủ đề bên trái, hoặc tạo chủ đề mới để bắt đầu ghi chú.</div>
