@@ -70,14 +70,14 @@
             <button class="tb-btn" id="btn-clear-format" title="Xoá định dạng, đưa về font/size chuẩn của trang">Tẩy định dạng</button>
           </div>
           <div class="tb-group" aria-label="Căn ngang">
-            <button class="tb-btn" data-align="left" title="Căn ngang: Trái (Đoạn văn hoặc Ô bảng)">⫷ Trái</button>
-            <button class="tb-btn" data-align="center" title="Căn ngang: Giữa (Đoạn văn hoặc Ô bảng)">≡ Giữa</button>
-            <button class="tb-btn" data-align="right" title="Căn ngang: Phải (Đoạn văn hoặc Ô bảng)">⫸ Phải</button>
+            <button class="tb-btn" data-align="left" title="Căn ngang: Trái (Đoạn văn hoặc Ô bảng)">← Trái</button>
+            <button class="tb-btn" data-align="center" title="Căn ngang: Giữa (Đoạn văn hoặc Ô bảng)">↔ Giữa</button>
+            <button class="tb-btn" data-align="right" title="Căn ngang: Phải (Đoạn văn hoặc Ô bảng)">→ Phải</button>
           </div>
           <div class="tb-group" aria-label="Căn dọc">
-            <button class="tb-btn" data-valign="top" title="Căn dọc: Trên (Ô trong bảng)">⤒ Trên</button>
-            <button class="tb-btn" data-valign="middle" title="Căn dọc: Giữa (Ô trong bảng)">⇕ Giữa</button>
-            <button class="tb-btn" data-valign="bottom" title="Căn dọc: Dưới (Ô trong bảng)">⤓ Dưới</button>
+            <button class="tb-btn" data-valign="top" title="Căn dọc: Trên (Ô trong bảng)">↑ Trên</button>
+            <button class="tb-btn" data-valign="middle" title="Căn dọc: Giữa (Ô trong bảng)">↕ Giữa</button>
+            <button class="tb-btn" data-valign="bottom" title="Căn dọc: Dưới (Ô trong bảng)">↓ Dưới</button>
           </div>
           <div class="tb-group" aria-label="Danh sách">
             <button class="tb-btn" data-cmd="insertUnorderedList" title="Danh sách chấm">• Danh sách</button>
@@ -90,15 +90,22 @@
             <button class="tb-btn" id="btn-table" title="Chèn bảng (kéo được viền để đổi kích thước hàng/cột)">▦ Bảng</button>
             <button class="tb-btn" data-block="BLOCKQUOTE" title="Trích dẫn / ghi chú">❝ Ghi chú</button>
           </div>
-          <div class="tb-group tb-group-hl" aria-label="Tô sáng văn bản">
-            <span class="tb-hl-label" title="Bôi đen đoạn văn bản cần tô, rồi bấm 1 màu bên dưới">✎ Highlight</span>
-            <button class="tb-swatch" data-highlight="#fff59d" title="Vàng" style="background:#fff59d"></button>
-            <button class="tb-swatch" data-highlight="#a5d6a7" title="Xanh lá" style="background:#a5d6a7"></button>
-            <button class="tb-swatch" data-highlight="#90caf9" title="Xanh dương" style="background:#90caf9"></button>
-            <button class="tb-swatch" data-highlight="#f48fb1" title="Hồng" style="background:#f48fb1"></button>
-            <button class="tb-swatch" data-highlight="#ffcc80" title="Cam" style="background:#ffcc80"></button>
+          <div class="tb-group tb-group-hl" aria-label="Màu chữ">
+            <span class="tb-hl-label" title="Bôi đen đoạn văn bản cần đổi màu, rồi bấm 1 màu bên dưới">🖊 Màu chữ</span>
+            <button class="tb-swatch tb-swatch-text" data-textcolor="#c26b0d" title="Cam đất" style="color:#c26b0d">A</button>
+            <button class="tb-swatch tb-swatch-text" data-textcolor="#2e7d32" title="Xanh lá" style="color:#2e7d32">A</button>
+            <button class="tb-swatch tb-swatch-text" data-textcolor="#1565c0" title="Xanh dương" style="color:#1565c0">A</button>
+            <button class="tb-swatch tb-swatch-text" data-textcolor="#c2185b" title="Hồng" style="color:#c2185b">A</button>
+            <button class="tb-swatch tb-swatch-text" data-textcolor="#c62828" title="Đỏ" style="color:#c62828">A</button>
             <button class="tb-swatch tb-swatch-custom" id="btn-highlight-custom" title="Chọn màu khác…">🎨</button>
-            <button class="tb-swatch tb-swatch-none" id="btn-highlight-clear" title="Bỏ tô sáng">✕</button>
+            <button class="tb-swatch tb-swatch-none" id="btn-highlight-clear" title="Bỏ màu chữ, về màu mặc định">✕</button>
+          </div>
+          <div class="tb-group tb-group-arrow" aria-label="Mũi tên logic">
+            <span class="tb-hl-label" title="Đặt con trỏ vào vị trí cần chèn rồi bấm 1 hướng bên dưới">↗ Logic</span>
+            <button class="tb-btn tb-arrow-btn" data-arrow="↑" aria-label="Chèn mũi tên lên" title="Mũi tên lên — thể hiện tăng / đi lên">↑</button>
+            <button class="tb-btn tb-arrow-btn" data-arrow="↓" aria-label="Chèn mũi tên xuống" title="Mũi tên xuống — thể hiện giảm / đi xuống">↓</button>
+            <button class="tb-btn tb-arrow-btn" data-arrow="←" aria-label="Chèn mũi tên trái" title="Mũi tên trái — thể hiện nguyên nhân / quay lại">←</button>
+            <button class="tb-btn tb-arrow-btn" data-arrow="→" aria-label="Chèn mũi tên phải" title="Mũi tên phải — thể hiện dẫn đến / kết quả">→</button>
           </div>
         </div>
 

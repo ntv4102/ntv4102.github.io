@@ -880,47 +880,36 @@
     if(cells.length === 0) return;
 
     cells.forEach(function(cell){
-      cell.style.verticalAlign = align;
+      // Dùng setProperty để giữ căn dọc ổn định kể cả khi ô vừa được
+      // gộp (rowspan/colspan) và CSS bảng được nâng cấp lại.
+      cell.style.setProperty('vertical-align', align, 'important');
       cell.setAttribute('data-valign', align);
     });
     scheduleSave();
     updateToolbarState();
   }
 
-  /* ---------------- tô sáng văn bản (highlight) ---------------- */
-  // Đánh dấu các span vừa được trình duyệt tạo ra (do execCommand hiliteColor/
-  // backColor) bằng class "kb-hl", để CSS làm sạch nền lạ (dùng cho nội dung
-  // dán vào) không xoá mất màu tô sáng do người dùng tự chọn.
-  function tagHighlightSpans(scope){
-    if(!scope || !scope.querySelectorAll) return;
-    var nodes = scope.querySelectorAll('[style*="background-color"]');
-    Array.prototype.forEach.call(nodes, function(n){
-      if(n.closest('.kb-table-tools')) return;
-      if(n.matches('td, th, table, .kb-table-wrap')) return; // nền ô bảng xử lý riêng
-      n.classList.add('kb-hl');
-    });
+  /* ---------------- đổi màu chữ (text color) ---------------- */
+  // Trước đây mục này tô NỀN (highlight) cho đoạn văn bản được chọn.
+  // Nay đổi thành đổi MÀU CHỮ của đoạn văn bản được chọn.
+  function getDefaultInkColor(){
+    try{
+      var v = getComputedStyle(document.documentElement).getPropertyValue('--ink');
+      return (v && v.trim()) || '#1f2937';
+    }catch(e){ return '#1f2937'; }
   }
 
-  function applyHighlight(color){
+  function applyTextColor(color){
     ensureEditableFocus();
     var sel = window.getSelection();
     if(!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
 
-    var range = sel.getRangeAt(0);
-    var container = range.commonAncestorContainer;
-    if(container.nodeType === Node.TEXT_NODE) container = container.parentElement;
-    var scope = (container && container.closest) ? (container.closest('[contenteditable="true"]') || els.editor) : els.editor;
-
     try{ document.execCommand('styleWithCSS', false, true); }catch(e){}
     var ok = false;
-    try{ ok = document.execCommand('hiliteColor', false, color); }catch(e){ ok = false; }
-    if(!ok){
-      try{ document.execCommand('backColor', false, color); }catch(e){}
-    }
+    try{ ok = document.execCommand('foreColor', false, color); }catch(e){ ok = false; }
 
-    tagHighlightSpans(scope);
     scheduleSave();
-    return true;
+    return ok;
   }
 
   /* ---------------- đổ màu nền ô bảng ---------------- */
@@ -1054,6 +1043,14 @@
     target.innerHTML = parts.length ? parts.join('<br>') : '<br>';
     target.rowSpan = maxR - minR + 1;
     target.colSpan = maxC - minC + 1;
+    var targetVAlign = target.getAttribute('data-valign') || target.style.verticalAlign;
+    if(targetVAlign) target.style.setProperty('vertical-align', targetVAlign, 'important');
+    // Ô mới gộp không tự nhiên cần tay kéo đổi cỡ -> không cần position:relative,
+    // nhờ đó vertical-align (căn giữa/căn dưới theo chiều dọc) hoạt động đúng.
+    target.classList.remove('kb-has-handle');
+    // Ép trình duyệt tính lại layout ngay sau khi đổi rowSpan/colSpan, để
+    // căn dọc (vertical-align) được áp dụng đúng ngay lần bấm đầu tiên.
+    void target.offsetHeight;
 
     clearSelectedCells();
     state.lastTableCell = target;
@@ -1447,7 +1444,7 @@
     updateToolbarState();
   });
 
-  // Các nút "swatch" (ô màu nhỏ) của cụm Tô sáng văn bản
+  // Các nút "swatch" (ô màu nhỏ) của cụm Màu chữ
   els.toolbar.addEventListener('click', function(ev){
     var swatch = ev.target.closest('.tb-swatch');
     if(!swatch) return;
@@ -1460,14 +1457,26 @@
       return;
     }
     if(swatch.id === 'btn-highlight-clear'){
-      applyHighlight('transparent');
+      applyTextColor(getDefaultInkColor());
       updateToolbarState();
       return;
     }
-    if(swatch.dataset.highlight){
-      applyHighlight(swatch.dataset.highlight);
+    if(swatch.dataset.textcolor){
+      applyTextColor(swatch.dataset.textcolor);
       updateToolbarState();
     }
+  });
+
+  // Cụm chèn mũi tên logic (↑ ↓ ← →)
+  els.toolbar.addEventListener('click', function(ev){
+    var arrowBtn = ev.target.closest('.tb-arrow-btn');
+    if(!arrowBtn) return;
+    ensureEditableFocus();
+    var arrow = arrowBtn.dataset.arrow;
+    if(!arrow) return;
+    document.execCommand('insertHTML', false, '<span class="kb-arrow" contenteditable="false">' + arrow + '</span>&nbsp;');
+    scheduleSave();
+    updateToolbarState();
   });
 
   cellBgCustomInput.addEventListener('input', function(){
@@ -1487,7 +1496,7 @@
       sel.removeAllRanges();
       sel.addRange(state.savedRange);
     }
-    applyHighlight(highlightCustomInput.value);
+    applyTextColor(highlightCustomInput.value);
     updateToolbarState();
   });
 
@@ -1618,7 +1627,7 @@
 
       var tools = wrap.querySelector('.kb-table-tools');
       if(tools){
-        if(!tools.querySelector('[data-act="align-center"]')){
+        if(!tools.querySelector('[data-act="align-center"]') || !tools.querySelector('[data-act="merge"]') || !tools.querySelector('.kb-bg-swatch')){
           tools.outerHTML = tableToolsHTML();
         }
       } else {
@@ -1653,11 +1662,16 @@
             h.setAttribute('data-col', idx);
             cell.appendChild(h);
           }
+          // Chỉ ô có tay kéo mới cần position:relative (xem style.css)
+          cell.classList.add('kb-has-handle');
         });
       }
 
       Array.prototype.forEach.call(table.rows, function(row){
-        var lastCell = row.cells[row.cells.length - 1];
+        // Không đặt tay kéo lên ô rowspan: nó có thể kéo nhầm nhiều hàng và
+        // làm trình duyệt tính lại chiều cao ô gộp không ổn định.
+        var rowCells = Array.prototype.slice.call(row.cells);
+        var lastCell = rowCells.reverse().find(function(cell){ return (cell.rowSpan || 1) === 1; });
         if(!lastCell) return;
         if(!lastCell.querySelector('.kb-row-resize')){
           var rh = document.createElement('span');
@@ -1665,6 +1679,7 @@
           rh.setAttribute('contenteditable', 'false');
           lastCell.appendChild(rh);
         }
+        lastCell.classList.add('kb-has-handle');
       });
     });
   }

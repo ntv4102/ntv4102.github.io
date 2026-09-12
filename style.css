@@ -442,18 +442,16 @@ h3,
   margin: 0 auto;
   width: 100%;
   padding: 0 40px;
-  display: grid;
-  grid-template-columns: repeat(3, max-content);
-  grid-template-rows: auto auto;
-  align-items: start;
-  justify-content: start;
-  gap: 4px;
-  padding-left: 16px;
-  padding-right: 16px;
-  overflow: visible;
-  white-space: normal;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  overflow: hidden;
+  white-space: nowrap;
   border-bottom: 1px solid var(--line);
-  padding-bottom: 7px;
+  padding-top: 6px;
+  padding-bottom: 8px;
   scrollbar-width: none;
   flex-shrink: 0;
   position: sticky;
@@ -466,22 +464,15 @@ h3,
   display: none;
 }
 
-#toolbar > .tb-group:nth-child(-n + 3) {
-  grid-row: 1;
-}
-
-#toolbar > .tb-group:nth-child(n + 4) {
-  grid-row: 2;
-}
-
 .tb-group {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px;
+  gap: 3px;
+  min-height: 32px;
+  padding: 3px;
   border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: rgba(255, 255, 255, .35);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, .55);
   flex: 0 0 auto;
 }
 
@@ -490,9 +481,10 @@ h3,
   border: 1px solid transparent;
   background: none;
   cursor: pointer;
-  padding: 5px 7px;
+  min-height: 26px;
+  padding: 5px 8px;
   font-size: 13px;
-  border-radius: var(--radius);
+  border-radius: 4px;
   color: var(--ink);
   font-family: inherit;
   line-height: 1;
@@ -504,9 +496,16 @@ h3,
 
 .tb-hl-label {
   font-size: 11px;
-  color: var(--ink-soft);
-  padding: 0 2px 0 4px;
+  color: var(--accent);
+  font-weight: 600;
+  padding: 0 4px;
   white-space: nowrap;
+}
+
+.tb-group-hl,
+.tb-group-arrow {
+  gap: 4px;
+  padding: 3px 5px;
 }
 
 .tb-swatch {
@@ -518,9 +517,14 @@ h3,
   border-radius: 4px;
   cursor: pointer;
   font-size: 11px;
-  line-height: 18px;
-  text-align: center;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
   background: #fff;
+  transform: translateY(0);
+  transition: border-color .15s ease, background-color .15s ease, transform .15s ease;
 }
 
 .tb-swatch:hover {
@@ -532,6 +536,55 @@ h3,
 .tb-swatch-none {
   background: var(--panel);
   color: var(--ink-soft);
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* Nút màu chữ: nền trắng trung tính + chữ "A" tô theo màu tương ứng,
+   để phân biệt rõ với kiểu tô nền (highlight) cũ — đây là đổi màu VĂN
+   BẢN, không phải đổi màu nền. */
+.tb-swatch-text {
+  background: #fff;
+  font-weight: 700;
+  font-size: 12px;
+  font-family: 'Source Serif 4', Georgia, serif;
+  box-shadow: inset 0 -2px 0 currentColor;
+}
+
+.tb-swatch-text:hover {
+  background: var(--panel);
+}
+
+/* Cụm chèn mũi tên logic (lên / xuống / trái / phải) */
+.tb-group-arrow {
+  background: var(--accent-soft);
+  border-color: #bfd0d4;
+}
+
+.tb-arrow-btn {
+  font-weight: 700;
+  font-size: 15px;
+  min-width: 26px;
+  min-height: 25px;
+  text-align: center;
+  color: var(--accent);
+  border-radius: 4px;
+}
+
+.tb-arrow-btn:hover {
+  background: var(--accent-soft);
+}
+
+/* Mũi tên đã chèn vào nội dung ghi chú — làm nổi bật để thấy rõ hướng
+   logic (nguyên nhân → kết quả, tăng ↑ / giảm ↓ …) */
+.kb-arrow {
+  display: inline-block;
+  font-weight: 700;
+  color: #1d6677;
+  padding: 0 4px;
+  transform: scale(1.12);
+  line-height: 1;
 }
 
 .kb-bg-swatch {
@@ -607,7 +660,6 @@ h3,
   font-family: 'Source Serif 4', Georgia, serif !important;
   font-size: 25px !important;
   font-weight: 700 !important;
-  color: var(--ink) !important;
   line-height: 1.35;
 }
 
@@ -616,6 +668,7 @@ h3,
   padding-bottom: 8px;
   border-bottom: 1.5px solid var(--line-strong);
   letter-spacing: -0.2px;
+  color: var(--ink);
 }
 
 /* --- Tiêu đề cấp 2 (H2) - Vạch chỉ mục màu nhấn bên trái --- */
@@ -624,7 +677,6 @@ h3,
   font-family: 'Source Serif 4', Georgia, serif !important;
   font-size: 19.5px !important;
   font-weight: 600 !important;
-  color: #1e3c4b !important;
   line-height: 1.4;
 }
 
@@ -632,6 +684,7 @@ h3,
   margin: 24px 0 10px;
   padding-left: 11px;
   border-left: 3.5px solid var(--accent);
+  color: #1e3c4b;
 }
 
 /* --- Tiêu đề cấp 3 (H3) - Màu nhấn đặc trưng của sổ tay --- */
@@ -640,13 +693,13 @@ h3,
   font-family: 'Source Serif 4', Georgia, serif !important;
   font-size: 16.5px !important;
   font-weight: 600 !important;
-  color: var(--accent) !important;
   line-height: 1.45;
 }
 
 #editor h3 {
   margin: 18px 0 8px;
   letter-spacing: 0.2px;
+  color: var(--accent);
 }
 
 /* --- Đoạn văn bản thường (P) - Rõ ràng, thoáng đãng, chuẩn mực --- */
@@ -888,7 +941,11 @@ h3,
   gap: 5px;
   margin-bottom: 6px;
   flex-wrap: wrap;
-  padding: 4px 0;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  box-shadow: 0 2px 8px rgba(34, 40, 46, .06);
 }
 
 .kb-table-wrap.active .kb-table-tools {
@@ -896,20 +953,24 @@ h3,
 }
 
 .kb-table-tools button {
-  font-size: 11px;
-  padding: 4px 8px;
+  min-height: 28px;
+  font-size: 11.5px;
+  padding: 5px 9px;
   border: 1px solid var(--line);
   background: #fff;
-  border-radius: var(--radius);
+  border-radius: 5px;
   cursor: pointer;
   color: var(--ink-soft);
   font-family: inherit;
   line-height: 1.2;
+  white-space: nowrap;
+  touch-action: manipulation;
 }
 
 .kb-table-tools button:hover {
   border-color: var(--line-strong);
   color: var(--ink);
+  background: var(--accent-soft);
 }
 
 .kb-table-tools button:disabled {
@@ -931,6 +992,21 @@ h3,
   margin: 0 2px;
 }
 
+.kb-table-tools button[data-act^="align-"] {
+  color: var(--accent);
+}
+
+.kb-table-tools button[data-act="merge"],
+.kb-table-tools button[data-act="split"] {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.kb-table-tools button[data-act="deltable"] {
+  color: var(--incorrect);
+  border-color: #e7c8c2;
+}
+
 .kb-table-scroll {
   overflow-x: auto;
   max-width: 100%;
@@ -950,12 +1026,23 @@ table.kb-table th {
   padding: 7px 14px;
   font-size: 13.5px;
   vertical-align: top;
-  position: relative;
   word-wrap: break-word;
   outline: none;
   text-decoration: none;
   -webkit-text-decoration: none;
   text-decoration-skip-ink: none;
+}
+
+/* Chỉ đặt position:relative cho ô nào thực sự cần chứa tay kéo đổi cỡ
+   (cột/hàng). Đặt position:relative cho TẤT CẢ ô (kể cả ô đã gộp bằng
+   rowSpan) từng khiến trình duyệt tính sai chiều cao khi gộp ô theo
+   chiều dọc, làm căn giữa/căn dưới theo chiều dọc (vertical-align) mất
+   tác dụng trên ô vừa gộp. Thu hẹp phạm vi position:relative sẽ tránh
+   được lỗi này mà vẫn giữ tay kéo đổi cỡ định vị đúng vị trí.
+   Xem thêm: hàm upgradeTables() trong app.js, nơi gán class này. */
+table.kb-table td.kb-has-handle,
+table.kb-table th.kb-has-handle {
+  position: relative;
 }
 
 table.kb-table td:focus,
@@ -1033,9 +1120,15 @@ table.kb-table th:focus {
 
 table.kb-table td.kb-cell-selected,
 table.kb-table th.kb-cell-selected {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
+  outline: none;
   background: var(--accent-soft);
+  box-shadow: inset 0 0 0 2px var(--accent);
+  transition: background-color .16s ease, box-shadow .16s ease;
+}
+
+table.kb-table td,
+table.kb-table th {
+  transition: background-color .16s ease, box-shadow .16s ease;
 }
 
 .kb-col-resize {
@@ -1213,15 +1306,13 @@ code {
 
 @media (min-width:761px) and (max-width:1100px) {
   #toolbar {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    overflow-x: auto;
-    overflow-y: hidden;
+    max-width: none;
+    padding-left: 20px;
+    padding-right: 20px;
   }
 
   .tb-group {
-    min-width: 0;
-    max-width: 100%;
-    flex-wrap: wrap;
+    max-width: none;
   }
 
   .tb-btn {
@@ -1309,13 +1400,20 @@ code {
 
   #toolbar {
     align-items: start;
-    gap: 6px;
+    display: grid;
+    grid-template-rows: repeat(2, minmax(32px, auto));
+    grid-auto-columns: max-content;
+    grid-auto-flow: column;
+    align-content: start;
+    gap: 5px;
     overflow-x: auto;
+    overflow-y: hidden;
     max-width: none;
     margin: 0;
     touch-action: pan-x;
     padding-top: 6px;
     padding-bottom: 7px;
+    scrollbar-width: thin;
   }
 
   #toolbar.toolbar-dragging {
@@ -1325,9 +1423,33 @@ code {
 
   .tb-group {
     align-items: stretch;
+    max-width: none;
   }
 
   .tb-btn {
     min-height: 30px;
+  }
+
+  .kb-table-tools {
+    gap: 4px;
+    padding: 5px;
+    margin-bottom: 7px;
+    max-height: none;
+    overflow: visible;
+    align-content: flex-start;
+  }
+
+  .kb-table-tools button {
+    min-height: 30px;
+    padding: 6px 8px;
+  }
+
+  .kb-tools-sep {
+    display: none;
+  }
+
+  .kb-bg-label {
+    width: 100%;
+    padding: 2px 3px 0;
   }
 }
