@@ -164,9 +164,21 @@
   async function deleteNoteStorage(id){ await Api.deleteNote(id); }
   function updateStorageStatusUI(){
     var t=els.storageStatusText;
-    if(!hasGithubConnection()){ t.textContent=state.index.length ? 'Đang xem bản ghi chú đã lưu trên thiết bị (chỉ đọc).' : 'Chưa đăng nhập GitHub — hãy đăng nhập để tải ghi chú.'; els.githubConnectBtn.textContent='Đăng nhập GitHub để lưu'; els.githubDisconnectBtn.hidden=true; }
-    else if(apiBroken){ t.textContent='Không gọi được Worker/GitHub. Đang dùng cache chỉ đọc — hãy đăng nhập lại.'; els.githubConnectBtn.textContent='Đăng nhập lại GitHub'; els.githubDisconnectBtn.hidden=false; }
-    else { t.textContent='Đã đăng nhập GitHub — ghi chú lưu trong repository riêng tư.'; els.githubConnectBtn.textContent='Đăng nhập GitHub'; els.githubDisconnectBtn.hidden=false; }
+    if(!hasGithubConnection()){
+      t.textContent=state.index.length ? 'Đang xem bản ghi chú đã lưu trên thiết bị (chỉ đọc).' : 'Chưa đăng nhập GitHub — hãy đăng nhập để tải ghi chú.';
+      els.githubConnectBtn.textContent='Đăng nhập GitHub để lưu';
+      els.githubConnectBtn.hidden=false;
+      els.githubDisconnectBtn.hidden=true;
+    } else if(apiBroken){
+      t.textContent='Không gọi được Worker/GitHub. Đang dùng cache chỉ đọc — hãy đăng nhập lại.';
+      els.githubConnectBtn.textContent='Đăng nhập lại GitHub';
+      els.githubConnectBtn.hidden=false;
+      els.githubDisconnectBtn.hidden=false;
+    } else {
+      t.textContent='Đã đăng nhập GitHub — ghi chú lưu trong repository riêng tư.';
+      els.githubConnectBtn.hidden=true;
+      els.githubDisconnectBtn.hidden=false;
+    }
     setReadOnly(!hasGithubConnection() || apiBroken);
   }
   function setReadOnly(readOnly){ els.title.readOnly=readOnly; els.editor.contentEditable=readOnly?'false':'true'; els.toolbar.style.pointerEvents=readOnly?'none':''; els.toolbar.style.opacity=readOnly?'0.55':''; els.newBtn.disabled=readOnly; els.noNoteCreate.disabled=readOnly; }
