@@ -375,6 +375,10 @@ h3,
   position: relative;
 }
 
+#note-view {
+  flex: 0 0 auto !important;
+}
+
 #sidebar-toggle,
 #sidebar-backdrop {
   display: none;

@@ -706,6 +706,66 @@
     return false;
   }
 
+  function convertHeadingToOrderedList(){
+    var sel = window.getSelection();
+    if(!sel || sel.rangeCount === 0) return false;
+
+    var block = getEditableBlock(sel.anchorNode);
+    if(!block || !block.matches('h1, h2, h3')) return false;
+
+    var list = block.closest('ol');
+    if(list && els.editor.contains(list)) return false;
+
+    var item = document.createElement('li');
+    item.innerHTML = block.innerHTML || '<br>';
+
+    var orderedList = document.createElement('ol');
+    var previous = null;
+    Array.prototype.forEach.call(els.editor.querySelectorAll('ol'), function(candidate){
+      if(candidate !== orderedList &&
+        (candidate.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING)){
+        previous = candidate;
+      }
+    });
+    if(previous){
+      var previousStart = parseInt(previous.getAttribute('start'), 10);
+      if(!Number.isFinite(previousStart)) previousStart = 1;
+      var nextStart = previousStart + previous.children.length;
+      if(nextStart > 1) orderedList.setAttribute('start', nextStart);
+    }
+    orderedList.appendChild(item);
+    block.parentNode.insertBefore(orderedList, block);
+    block.remove();
+
+    var range = document.createRange();
+    range.selectNodeContents(item);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return true;
+  }
+
+  function continueOrderedListNumbering(lists, existingLists){
+    lists.forEach(function(list){
+      if(existingLists.indexOf(list) !== -1 || list.hasAttribute('start')) return;
+
+      var previous = null;
+      Array.prototype.forEach.call(els.editor.querySelectorAll('ol'), function(candidate){
+        if(candidate !== list &&
+          !candidate.contains(list) &&
+          (candidate.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING)){
+          previous = candidate;
+        }
+      });
+      if(!previous) return;
+
+      var previousStart = parseInt(previous.getAttribute('start'), 10);
+      if(!Number.isFinite(previousStart)) previousStart = 1;
+      var nextStart = previousStart + previous.children.length;
+      if(nextStart > 1) list.setAttribute('start', nextStart);
+    });
+  }
+
   /* ---------------- xử lý căn lề (trái, giữa, phải) trong ô bảng & đoạn văn ---------------- */
   function getSelectedCells(){
     var selectedCells = state.selectedCells.filter(function(cell){
@@ -988,7 +1048,7 @@
       toggleAlphaList();
       return;
     } else if(btn.dataset.cmd === 'insertOrderedList'){
-      if(insertNewBlockForFormat('ol', true)){
+      if(convertHeadingToOrderedList() || insertNewBlockForFormat('ol', true)){
         scheduleSave();
         updateToolbarState();
         return;
@@ -1002,7 +1062,9 @@
           ol.removeAttribute('type');
         });
       } else {
+        var existingOls = ols.slice();
         document.execCommand('insertOrderedList', false, null);
+        continueOrderedListNumbering(getSelectedOls(), existingOls);
       }
     } else if(btn.dataset.cmd === 'insertUnorderedList'){
       if(insertNewBlockForFormat('ul', true)){
