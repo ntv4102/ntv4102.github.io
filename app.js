@@ -30,10 +30,31 @@
     modalOk: document.getElementById('modal-ok'),
     modalCancel: document.getElementById('modal-cancel'),
     storageStatusText: document.getElementById('storage-status-text'),
-    copyLinkBtn: document.getElementById('copy-link-btn')
+    copyLinkBtn: document.getElementById('copy-link-btn'),
+    btnHighlightCustom: document.getElementById('btn-highlight-custom'),
+    btnHighlightClear: document.getElementById('btn-highlight-clear')
   };
 
-  var state = { index: [], currentId: null, saveTimer: null, dirty: false, isSaving: false, lastTableCell: null, selectedCells: [] };
+  var state = { index: [], currentId: null, saveTimer: null, dirty: false, isSaving: false, lastTableCell: null, selectedCells: [], savedRange: null, bgTargetCells: null };
+
+  // Input màu ẩn dùng chung: 1 cho tô sáng văn bản, 1 cho đổ màu nền ô bảng.
+  // Được thao tác bằng JS (.click()) khi người dùng bấm nút "màu khác…".
+  function createHiddenColorInput(){
+    var input = document.createElement('input');
+    input.type = 'color';
+    input.setAttribute('aria-hidden', 'true');
+    input.tabIndex = -1;
+    input.style.position = 'fixed';
+    input.style.left = '-9999px';
+    input.style.top = '0';
+    input.style.width = '1px';
+    input.style.height = '1px';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+    return input;
+  }
+  var highlightCustomInput = createHiddenColorInput();
+  var cellBgCustomInput = createHiddenColorInput();
 
   function setSidebarOpen(open){
     els.app.classList.toggle('sidebar-open', open);
@@ -600,7 +621,7 @@
   }, true);
 
   els.toolbar.addEventListener('mousedown', function(ev){
-    if(ev.target.closest('.tb-btn')) ev.preventDefault();
+    if(ev.target.closest('.tb-btn, .tb-swatch')) ev.preventDefault();
   });
 
   // Nếu con trỏ đang ở trong vùng có thể sửa (kể cả ô bảng, vốn là một
@@ -866,6 +887,239 @@
     updateToolbarState();
   }
 
+  /* ---------------- tô sáng văn bản (highlight) ---------------- */
+  // Đánh dấu các span vừa được trình duyệt tạo ra (do execCommand hiliteColor/
+  // backColor) bằng class "kb-hl", để CSS làm sạch nền lạ (dùng cho nội dung
+  // dán vào) không xoá mất màu tô sáng do người dùng tự chọn.
+  function tagHighlightSpans(scope){
+    if(!scope || !scope.querySelectorAll) return;
+    var nodes = scope.querySelectorAll('[style*="background-color"]');
+    Array.prototype.forEach.call(nodes, function(n){
+      if(n.closest('.kb-table-tools')) return;
+      if(n.matches('td, th, table, .kb-table-wrap')) return; // nền ô bảng xử lý riêng
+      n.classList.add('kb-hl');
+    });
+  }
+
+  function applyHighlight(color){
+    ensureEditableFocus();
+    var sel = window.getSelection();
+    if(!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
+
+    var range = sel.getRangeAt(0);
+    var container = range.commonAncestorContainer;
+    if(container.nodeType === Node.TEXT_NODE) container = container.parentElement;
+    var scope = (container && container.closest) ? (container.closest('[contenteditable="true"]') || els.editor) : els.editor;
+
+    try{ document.execCommand('styleWithCSS', false, true); }catch(e){}
+    var ok = false;
+    try{ ok = document.execCommand('hiliteColor', false, color); }catch(e){ ok = false; }
+    if(!ok){
+      try{ document.execCommand('backColor', false, color); }catch(e){}
+    }
+
+    tagHighlightSpans(scope);
+    scheduleSave();
+    return true;
+  }
+
+  /* ---------------- đổ màu nền ô bảng ---------------- */
+  function applyCellBackground(color){
+    ensureEditableFocus();
+    updateLastTableCell();
+    var cells = getSelectedCells();
+    if(cells.length === 0) return false;
+    cells.forEach(function(cell){
+      if(color){
+        cell.style.backgroundColor = color;
+        cell.classList.add('kb-bg');
+      } else {
+        cell.style.backgroundColor = '';
+        cell.classList.remove('kb-bg');
+      }
+    });
+    scheduleSave();
+    updateToolbarState();
+    return true;
+  }
+
+  /* ---------------- gộp ô / tách ô trong bảng ---------------- */
+  // Loại bỏ tạm các tay kéo đổi kích thước (được sinh lại bởi upgradeTables
+  // ở cuối), để không lẫn vào nội dung khi gộp ô hoặc lệch chỉ số khi tách ô.
+  function stripTableHandles(table){
+    var handles = table.querySelectorAll('.kb-col-resize, .kb-row-resize');
+    Array.prototype.forEach.call(handles, function(h){ h.remove(); });
+  }
+
+  // Dựng "lưới" toạ độ (hàng, cột) đầy đủ của bảng, có tính đến các ô đã
+  // gộp sẵn (colspan/rowspan) từ trước — cần thiết để gộp/tách ô chính xác.
+  function buildTableGrid(table){
+    var grid = [];
+    var rows = table.rows;
+    for(var r = 0; r < rows.length; r++){
+      if(!grid[r]) grid[r] = [];
+      var row = rows[r];
+      var colPointer = 0;
+      for(var c = 0; c < row.cells.length; c++){
+        var cell = row.cells[c];
+        while(grid[r][colPointer] !== undefined) colPointer++;
+        var rs = cell.rowSpan || 1;
+        var cs = cell.colSpan || 1;
+        for(var rr = 0; rr < rs; rr++){
+          var gr = r + rr;
+          if(!grid[gr]) grid[gr] = [];
+          for(var cc = 0; cc < cs; cc++){
+            grid[gr][colPointer + cc] = { cell: cell, originRow: r, originCol: colPointer };
+          }
+        }
+        colPointer += cs;
+      }
+    }
+    return grid;
+  }
+
+  // Số ô thật (DOM) đứng trước cột "col" trong hàng "row", dùng để biết vị
+  // trí insertBefore chính xác khi tách 1 ô đã gộp trở lại nhiều ô.
+  function domInsertIndex(grid, row, col){
+    var idx = 0;
+    var seen = [];
+    for(var c = 0; c < col; c++){
+      var e = grid[row] && grid[row][c];
+      if(e && e.originRow === row && seen.indexOf(e.cell) === -1){
+        seen.push(e.cell);
+        idx++;
+      }
+    }
+    return idx;
+  }
+
+  function mergeSelectedCells(){
+    var cells = getSelectedCells();
+    if(cells.length < 2) return false;
+    var table = cells[0].closest('table');
+    if(!table) return false;
+    cells = cells.filter(function(c){ return c.closest('table') === table; });
+    if(cells.length < 2) return false;
+
+    stripTableHandles(table);
+    var grid = buildTableGrid(table);
+
+    // Xác định toạ độ gốc + kích thước của từng ô đang được chọn
+    var originOf = [];
+    (function(){
+      var found = [];
+      for(var r = 0; r < grid.length; r++){
+        for(var c = 0; c < (grid[r] || []).length; c++){
+          var e = grid[r][c];
+          if(e && e.originRow === r && e.originCol === c && cells.indexOf(e.cell) !== -1 && found.indexOf(e.cell) === -1){
+            found.push(e.cell);
+            originOf.push({ cell: e.cell, r: r, c: c, rs: e.cell.rowSpan || 1, cs: e.cell.colSpan || 1 });
+          }
+        }
+      }
+    })();
+    if(originOf.length < 2) return false;
+
+    var minR = Infinity, maxR = -1, minC = Infinity, maxC = -1;
+    originOf.forEach(function(o){
+      minR = Math.min(minR, o.r);
+      maxR = Math.max(maxR, o.r + o.rs - 1);
+      minC = Math.min(minC, o.c);
+      maxC = Math.max(maxC, o.c + o.cs - 1);
+    });
+
+    // Vùng chọn phải là 1 hình chữ nhật kín — không có ô nào lấn ra ngoài
+    // vùng đã chọn (tránh gộp lẹm sang ô khác không được chọn).
+    var orderedCells = [];
+    for(var rr = minR; rr <= maxR; rr++){
+      for(var cc = minC; cc <= maxC; cc++){
+        var e2 = grid[rr] ? grid[rr][cc] : undefined;
+        if(!e2) return false;
+        if(cells.indexOf(e2.cell) === -1) return false;
+        if(orderedCells.indexOf(e2.cell) === -1) orderedCells.push(e2.cell);
+      }
+    }
+
+    var target = grid[minR][minC].cell;
+    var others = orderedCells.filter(function(c){ return c !== target; });
+
+    var parts = [];
+    var targetEmpty = target.textContent.replace(/\u200B/g, '').trim() === '';
+    if(!targetEmpty) parts.push(target.innerHTML.trim());
+    others.forEach(function(cell){
+      var isEmpty = cell.textContent.replace(/\u200B/g, '').trim() === '';
+      if(!isEmpty) parts.push(cell.innerHTML.trim());
+      cell.remove();
+    });
+    target.innerHTML = parts.length ? parts.join('<br>') : '<br>';
+    target.rowSpan = maxR - minR + 1;
+    target.colSpan = maxC - minC + 1;
+
+    clearSelectedCells();
+    state.lastTableCell = target;
+    var wrap = table.closest('.kb-table-wrap');
+    upgradeTables(wrap ? wrap.parentElement || els.editor : els.editor);
+    scheduleSave();
+    updateToolbarState();
+    return true;
+  }
+
+  function splitActiveCell(){
+    var cells = getSelectedCells();
+    var cell = cells[0];
+    if(!cell) return false;
+    var rs = cell.rowSpan || 1;
+    var cs = cell.colSpan || 1;
+    if(rs <= 1 && cs <= 1) return false;
+    var table = cell.closest('table');
+    if(!table) return false;
+
+    stripTableHandles(table);
+    var grid = buildTableGrid(table);
+
+    var originR = -1, originC = -1;
+    for(var r = 0; r < grid.length && originR < 0; r++){
+      for(var c = 0; c < (grid[r] || []).length; c++){
+        var e = grid[r][c];
+        if(e && e.cell === cell && e.originRow === r && e.originCol === c){
+          originR = r; originC = c; break;
+        }
+      }
+    }
+    if(originR < 0) return false;
+
+    cell.rowSpan = 1;
+    cell.colSpan = 1;
+
+    var insertedCount = {};
+    for(var rr2 = 0; rr2 < rs; rr2++){
+      var rowIdx = originR + rr2;
+      var row = table.rows[rowIdx];
+      if(!row) continue;
+      for(var cc2 = 0; cc2 < cs; cc2++){
+        if(rr2 === 0 && cc2 === 0) continue;
+        var colIdx = originC + cc2;
+        var idx = domInsertIndex(grid, rowIdx, colIdx) + (insertedCount[rowIdx] || 0);
+        var tag = row.querySelector('th') ? 'th' : 'td';
+        var newCell = document.createElement(tag);
+        newCell.contentEditable = 'true';
+        newCell.setAttribute('spellcheck', 'false');
+        newCell.innerHTML = '<br>';
+        var refCell = row.cells[idx] || null;
+        row.insertBefore(newCell, refCell);
+        insertedCount[rowIdx] = (insertedCount[rowIdx] || 0) + 1;
+      }
+    }
+
+    clearSelectedCells();
+    state.lastTableCell = cell;
+    var wrap = table.closest('.kb-table-wrap');
+    upgradeTables(wrap ? wrap.parentElement || els.editor : els.editor);
+    scheduleSave();
+    updateToolbarState();
+    return true;
+  }
+
   /* ---------------- xử lý danh sách chữ abc / số / chấm ---------------- */
   function isAlphaOrderedList(list){
     var type = list.getAttribute('type');
@@ -1110,6 +1364,12 @@
           if(tbL) tbL.classList.toggle('on', curAlign === 'left');
           if(tbC) tbC.classList.toggle('on', curAlign === 'center');
           if(tbR) tbR.classList.toggle('on', curAlign === 'right');
+
+          var selCellsForMerge = getSelectedCells().filter(function(c){ return activeCell.closest('table').contains(c); });
+          var mergeBtn = tools.querySelector('[data-act="merge"]');
+          if(mergeBtn) mergeBtn.disabled = selCellsForMerge.length < 2;
+          var splitBtn = tools.querySelector('[data-act="split"]');
+          if(splitBtn) splitBtn.disabled = (activeCell.rowSpan || 1) <= 1 && (activeCell.colSpan || 1) <= 1;
         }
       }
     }
@@ -1187,6 +1447,50 @@
     updateToolbarState();
   });
 
+  // Các nút "swatch" (ô màu nhỏ) của cụm Tô sáng văn bản
+  els.toolbar.addEventListener('click', function(ev){
+    var swatch = ev.target.closest('.tb-swatch');
+    if(!swatch) return;
+    if(swatch.id === 'btn-highlight-custom'){
+      var curSel = window.getSelection();
+      if(curSel && curSel.rangeCount > 0 && !curSel.isCollapsed){
+        state.savedRange = curSel.getRangeAt(0).cloneRange();
+        highlightCustomInput.click();
+      }
+      return;
+    }
+    if(swatch.id === 'btn-highlight-clear'){
+      applyHighlight('transparent');
+      updateToolbarState();
+      return;
+    }
+    if(swatch.dataset.highlight){
+      applyHighlight(swatch.dataset.highlight);
+      updateToolbarState();
+    }
+  });
+
+  cellBgCustomInput.addEventListener('input', function(){
+    if(state.bgTargetCells && state.bgTargetCells.length){
+      state.bgTargetCells.forEach(function(cell){
+        cell.style.backgroundColor = cellBgCustomInput.value;
+        cell.classList.add('kb-bg');
+      });
+      scheduleSave();
+      updateToolbarState();
+    }
+  });
+
+  highlightCustomInput.addEventListener('input', function(){
+    if(state.savedRange){
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(state.savedRange);
+    }
+    applyHighlight(highlightCustomInput.value);
+    updateToolbarState();
+  });
+
   els.btnCheck.addEventListener('click', function(){
     ensureEditableFocus();
     var html = '<div class="kb-check" data-status="none" contenteditable="false">' +
@@ -1235,6 +1539,18 @@
       '<button type="button" data-act="align-center" title="Căn giữa ô đang chọn">≡ Giữa</button>' +
       '<button type="button" data-act="align-right" title="Căn phải ô đang chọn">⫸ Phải</button>' +
       '<button type="button" data-act="align-col" title="Căn giữa toàn bộ cột này">≡ Cả cột</button>' +
+      '<span class="kb-tools-sep"></span>' +
+      '<button type="button" data-act="merge" title="Bôi đen (kéo chọn) nhiều ô liền nhau rồi bấm để gộp thành 1 ô">⊞ Gộp ô</button>' +
+      '<button type="button" data-act="split" title="Tách 1 ô đã gộp trở lại thành các ô ban đầu">⊟ Tách ô</button>' +
+      '<span class="kb-tools-sep"></span>' +
+      '<span class="kb-bg-label" title="Chọn 1 hoặc nhiều ô rồi bấm màu để đổ nền">🎨 Nền ô:</span>' +
+      '<button type="button" class="kb-bg-swatch" data-bg="#fff9c4" title="Vàng nhạt" style="background:#fff9c4"></button>' +
+      '<button type="button" class="kb-bg-swatch" data-bg="#c8e6c9" title="Xanh lá nhạt" style="background:#c8e6c9"></button>' +
+      '<button type="button" class="kb-bg-swatch" data-bg="#bbdefb" title="Xanh dương nhạt" style="background:#bbdefb"></button>' +
+      '<button type="button" class="kb-bg-swatch" data-bg="#f8bbd0" title="Hồng nhạt" style="background:#f8bbd0"></button>' +
+      '<button type="button" class="kb-bg-swatch" data-bg="#e0e0e0" title="Xám nhạt" style="background:#e0e0e0"></button>' +
+      '<button type="button" class="kb-bg-swatch" data-act="bg-custom" title="Chọn màu nền khác…">🎨</button>' +
+      '<button type="button" class="kb-bg-swatch" data-act="bg-clear" title="Bỏ màu nền ô">✕</button>' +
       '<span class="kb-tools-sep"></span>' +
       '<button type="button" data-act="deltable">Xoá bảng</button></div>';
   }
@@ -1429,7 +1745,27 @@
       var table = tw.querySelector('table');
       var act = tblBtn.dataset.act;
       var cg = table.querySelector(':scope > colgroup');
-      if(act === 'addrow'){
+      if(tblBtn.dataset.bg){
+        applyCellBackground(tblBtn.dataset.bg);
+        return;
+      } else if(act === 'bg-custom'){
+        var bgCells = getSelectedCells().filter(function(c){ return table.contains(c); });
+        if(bgCells.length === 0 && state.lastTableCell && table.contains(state.lastTableCell)) bgCells = [state.lastTableCell];
+        if(bgCells.length > 0){
+          state.bgTargetCells = bgCells;
+          cellBgCustomInput.click();
+        }
+        return;
+      } else if(act === 'bg-clear'){
+        applyCellBackground(null);
+        return;
+      } else if(act === 'merge'){
+        mergeSelectedCells();
+        return;
+      } else if(act === 'split'){
+        splitActiveCell();
+        return;
+      } else if(act === 'addrow'){
         var lastRow = table.rows[table.rows.length - 1];
         var newRow = table.insertRow(-1);
         for(var i = 0; i < lastRow.cells.length; i++){

@@ -502,6 +502,62 @@ h3,
   background: var(--accent-soft);
 }
 
+.tb-hl-label {
+  font-size: 11px;
+  color: var(--ink-soft);
+  padding: 0 2px 0 4px;
+  white-space: nowrap;
+}
+
+.tb-swatch {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  background: #fff;
+}
+
+.tb-swatch:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.tb-swatch-custom,
+.tb-swatch-none {
+  background: var(--panel);
+  color: var(--ink-soft);
+}
+
+.kb-bg-swatch {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  cursor: pointer;
+  background: #fff;
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.kb-bg-swatch:hover {
+  border-color: var(--line-strong);
+}
+
+.kb-bg-label {
+  font-size: 11px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  padding: 0 2px 0 4px;
+}
+
 .tb-btn:active,
 .tb-btn.on {
   background: var(--accent-soft);
@@ -678,7 +734,7 @@ h3,
   font-family: inherit !important;
 }
 
-#editor [style*="background"]:not(.kb-check):not(.kb-check-tag):not(.kb-check-btn):not(.kb-icon-toggle):not(.kb-table-tools button):not(th) {
+#editor [style*="background"]:not(.kb-check):not(.kb-check-tag):not(.kb-check-btn):not(.kb-icon-toggle):not(.kb-table-tools button):not(th):not(.kb-hl):not(.kb-bg) {
   background: transparent !important;
 }
 
@@ -854,6 +910,11 @@ h3,
 .kb-table-tools button:hover {
   border-color: var(--line-strong);
   color: var(--ink);
+}
+
+.kb-table-tools button:disabled {
+  opacity: .4;
+  cursor: not-allowed;
 }
 
 .kb-table-tools button.on {
