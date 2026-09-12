@@ -59,7 +59,7 @@
        worker vào API_BASE bên dưới.
      ========================================================= */
 
-  var API_BASE = 'https://so-tay-kien-thuc-ap.ntv-4102.workers.dev/';
+  var API_BASE = 'https://so-tay-kien-thuc-ap.ntv-4102.workers.dev';
 
   // Mã không gian dữ liệu mặc định — cố định, không đổi mỗi lần mở.
   // Có thể đổi thành chuỗi khác nếu muốn, nhưng chỉ đổi 1 LẦN DUY NHẤT
@@ -75,12 +75,34 @@
   var SPACE_ID = getOrCreateSpaceId();
   var apiBroken = false; // true nếu không gọi được API (sai API_BASE, mất mạng, worker lỗi...)
 
+  function apiUrl(path){
+    return API_BASE.replace(/\/+$/, '') + '/' + encodeURIComponent(SPACE_ID) + '/' + path;
+  }
+
+  async function apiFetch(path, options){
+    try{
+      var res = await fetch(apiUrl(path), options);
+      if(!res.ok){
+        apiBroken = true;
+        throw new Error('API ' + res.status + ' ' + res.statusText);
+      }
+      apiBroken = false;
+      return res;
+    }catch(e){
+      apiBroken = true;
+      if(e instanceof TypeError){
+        throw new Error('Không kết nối được API. Kiểm tra API_BASE, HTTPS và CORS.');
+      }
+      throw e;
+    }
+  }
+
   function shareLink(){ return location.href; }
 
   var Api = {
     async getIndex(){
       try{
-        var res = await fetch(API_BASE + '/' + SPACE_ID + '/index');
+        var res = await fetch(apiUrl('index'));
         if(res.status === 404){ apiBroken = false; return []; }
         if(!res.ok) throw new Error('index ' + res.status);
         apiBroken = false;
@@ -88,17 +110,15 @@
       }catch(e){ apiBroken = true; return []; }
     },
     async putIndex(arr){
-      var res = await fetch(API_BASE + '/' + SPACE_ID + '/index', {
+      await apiFetch('index', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(arr)
       });
-      if(!res.ok){ apiBroken = true; throw new Error('index put ' + res.status); }
-      apiBroken = false;
     },
     async getNote(id){
       try{
-        var res = await fetch(API_BASE + '/' + SPACE_ID + '/notes/' + encodeURIComponent(id));
+        var res = await fetch(apiUrl('notes/' + encodeURIComponent(id)));
         if(res.status === 404){ apiBroken = false; return null; }
         if(!res.ok) throw new Error('note ' + res.status);
         apiBroken = false;
@@ -106,22 +126,20 @@
       }catch(e){ apiBroken = true; return null; }
     },
     async putNote(id, data){
-      var res = await fetch(API_BASE + '/' + SPACE_ID + '/notes/' + encodeURIComponent(id), {
+      await apiFetch('notes/' + encodeURIComponent(id), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
-      if(!res.ok){ apiBroken = true; throw new Error('note put ' + res.status); }
-      apiBroken = false;
     },
     async deleteNote(id){
       try{
-        await fetch(API_BASE + '/' + SPACE_ID + '/notes/' + encodeURIComponent(id), { method: 'DELETE' });
+        await fetch(apiUrl('notes/' + encodeURIComponent(id)), { method: 'DELETE' });
       }catch(e){}
     },
     async getLast(){
       try{
-        var res = await fetch(API_BASE + '/' + SPACE_ID + '/last');
+        var res = await fetch(apiUrl('last'));
         if(!res.ok) return null;
         var j = await res.json();
         return j && j.id ? j.id : null;
@@ -129,7 +147,7 @@
     },
     async setLast(id){
       try{
-        await fetch(API_BASE + '/' + SPACE_ID + '/last', {
+        await fetch(apiUrl('last'), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: id })
@@ -361,7 +379,7 @@
       try{
         var title = els.title.value.trim();
         var html = els.editor.innerHTML;
-        fetch(API_BASE + '/' + SPACE_ID + '/notes/' + encodeURIComponent(state.currentId), {
+        fetch(apiUrl('notes/' + encodeURIComponent(state.currentId)), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ title: title, html: html }),
@@ -1855,5 +1873,9 @@
     if(target) await openNote(target.id);
   }
 
-  init();
+  init().catch(function(err){
+    apiBroken = true;
+    updateStorageStatusUI();
+    console.error('Không thể khởi tạo sổ tay:', err);
+  });
 })();
