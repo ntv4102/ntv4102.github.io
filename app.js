@@ -2,6 +2,9 @@
   "use strict";
 
   var els = {
+    app: document.getElementById('app'),
+    sidebarToggle: document.getElementById('sidebar-toggle'),
+    sidebarBackdrop: document.getElementById('sidebar-backdrop'),
     list: document.getElementById('note-list'),
     search: document.getElementById('search'),
     newBtn: document.getElementById('new-note-btn'),
@@ -26,34 +29,16 @@
     modalOk: document.getElementById('modal-ok'),
     modalCancel: document.getElementById('modal-cancel'),
     storageStatusText: document.getElementById('storage-status-text'),
-    copyLinkBtn: document.getElementById('copy-link-btn'),
-    sidebarToggle: document.getElementById('sidebar-toggle'),
-    sidebarClose: document.getElementById('sidebar-close'),
-    sidebarBackdrop: document.getElementById('sidebar-backdrop')
+    copyLinkBtn: document.getElementById('copy-link-btn')
   };
 
-  /* ---------------- mobile sidebar (off-canvas) ---------------- */
-  function openSidebarMobile(){ document.getElementById('app').classList.add('sidebar-open'); }
-  function closeSidebarMobile(){ document.getElementById('app').classList.remove('sidebar-open'); }
-  if(els.sidebarToggle) els.sidebarToggle.addEventListener('click', openSidebarMobile);
-  if(els.sidebarClose) els.sidebarClose.addEventListener('click', closeSidebarMobile);
-  if(els.sidebarBackdrop) els.sidebarBackdrop.addEventListener('click', closeSidebarMobile);
-  document.addEventListener('keydown', function(ev){
-    if(ev.key === 'Escape') closeSidebarMobile();
-  });
-
-  /* replay the note-view entrance animation (header/toolbar/editor fade-up)
-     every time a note is opened, by forcing a reflow between the class
-     removal and re-addition */
-  function replayNoteEnterAnim(){
-    var el = els.noteView;
-    if(!el) return;
-    el.classList.remove('kb-note-enter');
-    void el.offsetWidth; /* force reflow */
-    el.classList.add('kb-note-enter');
-  }
-
   var state = { index: [], currentId: null, saveTimer: null, dirty: false, isSaving: false, lastTableCell: null, selectedCells: [] };
+
+  function setSidebarOpen(open){
+    els.app.classList.toggle('sidebar-open', open);
+    els.sidebarToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    els.sidebarToggle.setAttribute('aria-label', open ? 'Đóng danh sách chủ đề' : 'Mở danh sách chủ đề');
+  }
 
   function uid(){ return 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
   function fmtTime(ts){
@@ -234,11 +219,10 @@
       els.list.appendChild(empty);
       return;
     }
-    items.forEach(function(n, i){
+    items.forEach(function(n){
       var row = document.createElement('div');
       row.className = 'note-item' + (n.id === state.currentId ? ' active' : '');
       row.dataset.id = n.id;
-      row.style.setProperty('--i', i);
 
       var main = document.createElement('div');
       main.className = 'ni-main';
@@ -279,11 +263,10 @@
     els.saveState.classList.remove('saving', 'dirty');
     els.noNote.style.display = 'none';
     els.noteView.style.display = 'flex';
-    replayNoteEnterAnim();
     Api.setLast(id);
     renderList();
     updateToolbarState();
-    if(window.innerWidth <= 760) closeSidebarMobile();
+    setSidebarOpen(false);
   }
 
   async function createNote(prefill){
@@ -479,10 +462,19 @@
   });
 
   var cellSelection = { anchor: null, selecting: false };
+  var recentTouch = false;
+  els.editor.addEventListener('touchstart', function(){
+    recentTouch = true;
+    setTimeout(function(){ recentTouch = false; }, 600);
+  }, { passive: true });
+
   els.editor.addEventListener('mousedown', function(ev){
     var tableWrap = ev.target.closest('.kb-table-wrap');
     if(tableWrap) setActiveTableWrap(tableWrap);
     else clearActiveTableWrap();
+
+    // Touch trên bảng dành cho thao tác chọn văn bản native của trình duyệt.
+    if(recentTouch || (ev.sourceCapabilities && ev.sourceCapabilities.firesTouchEvents)) return;
 
     var cell = ev.target.closest('th, td');
     if(!cell || ev.target.closest('.kb-col-resize, .kb-row-resize, .kb-table-tools')) return;
@@ -536,6 +528,39 @@
   });
 
   /* ---------------- toolbar ---------------- */
+  var toolbarDrag = { active: false, startX: 0, scrollLeft: 0, moved: false };
+  els.toolbar.addEventListener('pointerdown', function(ev){
+    if(els.toolbar.scrollWidth <= els.toolbar.clientWidth) return;
+    toolbarDrag.active = true;
+    toolbarDrag.moved = false;
+    toolbarDrag.startX = ev.clientX;
+    toolbarDrag.scrollLeft = els.toolbar.scrollLeft;
+    els.toolbar.classList.add('toolbar-dragging');
+    els.toolbar.setPointerCapture(ev.pointerId);
+  });
+  els.toolbar.addEventListener('pointermove', function(ev){
+    if(!toolbarDrag.active) return;
+    var distance = ev.clientX - toolbarDrag.startX;
+    if(Math.abs(distance) > 4) toolbarDrag.moved = true;
+    if(toolbarDrag.moved){
+      ev.preventDefault();
+      els.toolbar.scrollLeft = toolbarDrag.scrollLeft - distance;
+    }
+  });
+  function stopToolbarDrag(){
+    toolbarDrag.active = false;
+    els.toolbar.classList.remove('toolbar-dragging');
+  }
+  els.toolbar.addEventListener('pointerup', stopToolbarDrag);
+  els.toolbar.addEventListener('pointercancel', stopToolbarDrag);
+  els.toolbar.addEventListener('click', function(ev){
+    if(toolbarDrag.moved){
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      toolbarDrag.moved = false;
+    }
+  }, true);
+
   els.toolbar.addEventListener('mousedown', function(ev){
     if(ev.target.closest('.tb-btn')) ev.preventDefault();
   });
@@ -1861,6 +1886,10 @@
   });
 
   /* ---------------- search / new ---------------- */
+  els.sidebarToggle.addEventListener('click', function(){
+    setSidebarOpen(!els.app.classList.contains('sidebar-open'));
+  });
+  els.sidebarBackdrop.addEventListener('click', function(){ setSidebarOpen(false); });
   els.search.addEventListener('input', renderList);
   els.newBtn.addEventListener('click', function(){ createNote(); });
   els.noNoteCreate.addEventListener('click', function(){ createNote(); });

@@ -15,12 +15,9 @@
 <body>
   <div id="app">
 
-    <div id="sidebar-backdrop"></div>
-
     <aside id="sidebar">
       <div id="brand">
         <div class="mark">ABC</div>
-        <button id="sidebar-close" aria-label="Đóng menu">✕</button>
       </div>
       <div id="search-wrap">
         <input id="search" type="text" placeholder="Tìm chủ đề…">
@@ -40,12 +37,10 @@
       </div>
     </aside>
 
-    <main id="main">
-      <div id="mobile-topbar">
-        <button id="sidebar-toggle" aria-label="Mở menu">☰</button>
-        <div id="mobile-topbar-title">Võ Lâm Mật Tịch</div>
-      </div>
+    <div id="sidebar-backdrop" aria-hidden="true"></div>
 
+    <main id="main">
+      <button id="sidebar-toggle" type="button" aria-label="Mở danh sách chủ đề" aria-expanded="false">☰</button>
       <div id="no-note" style="display:none;">
         <div class="serif">Chưa có chủ đề nào được chọn</div>
         <div>Chọn một chủ đề bên trái, hoặc tạo chủ đề mới để bắt đầu ghi chú.</div>
@@ -62,35 +57,39 @@
         </div>
 
         <div id="toolbar">
-          <button class="tb-btn" data-block="P" title="Văn bản thường">¶</button>
-          <button class="tb-btn" data-block="H1" title="Tiêu đề 1">H1</button>
-          <button class="tb-btn" data-block="H2" title="Tiêu đề 2">H2</button>
-          <button class="tb-btn" data-block="H3" title="Tiêu đề 3">H3</button>
-          <div class="tb-sep"></div>
-          <button class="tb-btn" data-cmd="bold" title="In đậm"><b>B</b></button>
-          <button class="tb-btn" data-cmd="italic" title="In nghiêng"><i>I</i></button>
-          <button class="tb-btn" data-cmd="underline" title="Gạch chân"><u>U</u></button>
-          <button class="tb-btn" id="btn-clear-format" title="Xoá định dạng, đưa về font/size chuẩn của trang">Tẩy định
-            dạng</button>
-          <div class="tb-sep"></div>
-          <button class="tb-btn" data-align="left" title="Căn ngang: Trái (Đoạn văn hoặc Ô bảng)">⫷ Trái</button>
-          <button class="tb-btn" data-align="center" title="Căn ngang: Giữa (Đoạn văn hoặc Ô bảng)">≡ Giữa</button>
-          <button class="tb-btn" data-align="right" title="Căn ngang: Phải (Đoạn văn hoặc Ô bảng)">⫸ Phải</button>
-          <div class="tb-sep"></div>
-          <button class="tb-btn" data-valign="top" title="Căn dọc: Trên (Ô trong bảng)">⤒ Trên</button>
-          <button class="tb-btn" data-valign="middle" title="Căn dọc: Giữa (Ô trong bảng)">⇕ Giữa</button>
-          <button class="tb-btn" data-valign="bottom" title="Căn dọc: Dưới (Ô trong bảng)">⤓ Dưới</button>
-          <div class="tb-sep"></div>
-          <button class="tb-btn" data-cmd="insertUnorderedList" title="Danh sách chấm">• Danh sách</button>
-          <button class="tb-btn" data-cmd="insertOrderedList" title="Danh sách số">1. Danh sách</button>
-          <button class="tb-btn" id="btn-list-alpha" title="Danh sách chữ (a, b, c)">a. Danh sách</button>
-          <div class="tb-sep"></div>
-          <button class="tb-btn" id="btn-check" title="Chèn mục kiểm tra Đúng/Sai (cả dòng)">☑ Dòng Đúng/Sai</button>
-          <button class="tb-btn" id="btn-icon" title="Chèn icon Đúng/Sai nhỏ, đặt được vào ô bảng hoặc bất kỳ đâu">◐
-            Icon Đ/S</button>
-          <button class="tb-btn" id="btn-table" title="Chèn bảng (kéo được viền để đổi kích thước hàng/cột)">▦
-            Bảng</button>
-          <button class="tb-btn" data-block="BLOCKQUOTE" title="Trích dẫn / ghi chú">❝ Ghi chú</button>
+          <div class="tb-group" aria-label="Kiểu đoạn">
+            <button class="tb-btn" data-block="P" title="Văn bản thường">¶</button>
+            <button class="tb-btn" data-block="H1" title="Tiêu đề 1">H1</button>
+            <button class="tb-btn" data-block="H2" title="Tiêu đề 2">H2</button>
+            <button class="tb-btn" data-block="H3" title="Tiêu đề 3">H3</button>
+          </div>
+          <div class="tb-group" aria-label="Định dạng chữ">
+            <button class="tb-btn" data-cmd="bold" title="In đậm"><b>B</b></button>
+            <button class="tb-btn" data-cmd="italic" title="In nghiêng"><i>I</i></button>
+            <button class="tb-btn" data-cmd="underline" title="Gạch chân"><u>U</u></button>
+            <button class="tb-btn" id="btn-clear-format" title="Xoá định dạng, đưa về font/size chuẩn của trang">Tẩy định dạng</button>
+          </div>
+          <div class="tb-group" aria-label="Căn ngang">
+            <button class="tb-btn" data-align="left" title="Căn ngang: Trái (Đoạn văn hoặc Ô bảng)">⫷ Trái</button>
+            <button class="tb-btn" data-align="center" title="Căn ngang: Giữa (Đoạn văn hoặc Ô bảng)">≡ Giữa</button>
+            <button class="tb-btn" data-align="right" title="Căn ngang: Phải (Đoạn văn hoặc Ô bảng)">⫸ Phải</button>
+          </div>
+          <div class="tb-group" aria-label="Căn dọc">
+            <button class="tb-btn" data-valign="top" title="Căn dọc: Trên (Ô trong bảng)">⤒ Trên</button>
+            <button class="tb-btn" data-valign="middle" title="Căn dọc: Giữa (Ô trong bảng)">⇕ Giữa</button>
+            <button class="tb-btn" data-valign="bottom" title="Căn dọc: Dưới (Ô trong bảng)">⤓ Dưới</button>
+          </div>
+          <div class="tb-group" aria-label="Danh sách">
+            <button class="tb-btn" data-cmd="insertUnorderedList" title="Danh sách chấm">• Danh sách</button>
+            <button class="tb-btn" data-cmd="insertOrderedList" title="Danh sách số">1. Danh sách</button>
+            <button class="tb-btn" id="btn-list-alpha" title="Danh sách chữ (a, b, c)">a. Danh sách</button>
+          </div>
+          <div class="tb-group" aria-label="Chèn nội dung">
+            <button class="tb-btn" id="btn-check" title="Chèn mục kiểm tra Đúng/Sai (cả dòng)">☑ Dòng Đ/S</button>
+            <button class="tb-btn" id="btn-icon" title="Chèn icon Đúng/Sai nhỏ, đặt được vào ô bảng hoặc bất kỳ đâu">◐ Icon Đ/S</button>
+            <button class="tb-btn" id="btn-table" title="Chèn bảng (kéo được viền để đổi kích thước hàng/cột)">▦ Bảng</button>
+            <button class="tb-btn" data-block="BLOCKQUOTE" title="Trích dẫn / ghi chú">❝ Ghi chú</button>
+          </div>
         </div>
 
         <div id="editor-scroll">
