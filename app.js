@@ -81,7 +81,7 @@
   }
 
   /* ---------------- lưu trữ qua Worker OAuth ---------------- */
-  var WORKER_API = 'https://so-tay-kien-thuc-ap.ntv-4102.workers.dev/';
+  var WORKER_API = 'https://so-tay-kien-thuc-ap.ntv-4102.workers.dev'.replace(/\/+$/, '');
   var CACHE_PREFIX = 'knowledge-notes.cache.oauth.';
   var apiBroken = false;
   var authenticated = false;
