@@ -100,7 +100,9 @@
       var detail = '';
       try { detail = (await res.text()).slice(0, 180); } catch(e) {}
       if(res.status === 401) authenticated = false;
-      throw new Error('Worker API ' + res.status + (detail ? ': ' + detail : ''));
+      var error = new Error('Worker API ' + res.status + (detail ? ': ' + detail : ''));
+      error.status = res.status;
+      throw error;
     }
     return res;
   }
@@ -108,14 +110,13 @@
     async getIndex(){
       if(!hasGithubConnection()) return readCache('index', []);
       try {
-        var r = await fetch(WORKER_API + '/index', { credentials:'include' });
-        if(r.status === 404){ apiBroken = false; return []; }
-        if(!r.ok) throw new Error('Worker API ' + r.status);
+        var r = await workerFetch('/index');
         var v = await r.json();
         apiBroken = false;
         writeCache('index', v);
         return v;
       } catch(e) {
+        if(e.status === 404){ apiBroken = false; return []; }
         apiBroken = true;
         return readCache('index', []);
       }

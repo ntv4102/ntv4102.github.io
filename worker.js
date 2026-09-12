@@ -61,13 +61,23 @@ async function proxy(request, env, session, path) {
   let options = {};
   if (request.method === 'PUT') {
     const value = await request.text();
-    let existing = await github(request, env, path);
-    let sha = null;
-    if (existing.ok) sha = (await existing.json()).sha;
-    const payload = { message: 'Update notes', content: btoa(unescape(encodeURIComponent(value))) };
-    if (sha) payload.sha = sha;
-    options = { method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload) };
+    const content = btoa(unescape(encodeURIComponent(value)));
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const existing = await github(request, env, path);
+      let sha = null;
+      if (existing.ok) sha = (await existing.json()).sha;
+      const payload = { message: 'Update notes', content };
+      if (sha) payload.sha = sha;
+      options = { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload) };
+      const gh = await github(request, env, path, options);
+      if (gh.status !== 409 || attempt === 1) {
+        const text = await gh.text();
+        if (!gh.ok) return response(request, text || gh.statusText, gh.status, { 'Content-Type': 'application/json' });
+        const data = JSON.parse(text);
+        return json(request, { sha: data.content && data.content.sha });
+      }
+    }
   } else if (request.method === 'DELETE') {
     const existing = await github(request, env, path);
     if (!existing.ok) return response(request, 'OK');
