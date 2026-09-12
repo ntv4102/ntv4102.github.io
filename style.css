@@ -451,11 +451,11 @@ h3,
   border-bottom: 1px solid var(--line);
   padding-bottom: 7px;
   scrollbar-width: none;
+  flex-shrink: 0;
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--panel);
-  box-shadow: 0 3px 8px #00000012;
+  background: var(--paper);
 }
 
 #toolbar::-webkit-scrollbar {
@@ -1149,7 +1149,8 @@ code {
 @media (min-width:761px) and (max-width:1100px) {
   #toolbar {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
   }
 
   .tb-group {

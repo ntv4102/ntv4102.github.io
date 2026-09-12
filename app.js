@@ -11,6 +11,7 @@
     noNote: document.getElementById('no-note'),
     noNoteCreate: document.getElementById('no-note-create'),
     noteView: document.getElementById('note-view'),
+    main: document.getElementById('main'),
     title: document.getElementById('title-input'),
     updatedAt: document.getElementById('updated-at'),
     saveState: document.getElementById('save-state'),
