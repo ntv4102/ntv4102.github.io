@@ -43,13 +43,16 @@
      localStorage làm nơi lưu chính).
 
      Cách hoạt động:
-     - Mỗi "không gian dữ liệu" có một mã ngẫu nhiên (space id),
-       được gắn vào URL dạng ?s=xxxxxxxx khi mở trang lần đầu.
-     - Chia sẻ NGUYÊN URL đó (có phần ?s=...) cho ai, người đó mở
-       lên là thấy và SỬA được ngay — không cần đăng nhập, không
-       cần "kết nối" gì thêm. Vì vậy: ai có link là có toàn quyền
-       đọc/ghi. Đừng đăng công khai link này nếu không muốn người
-       lạ sửa nội dung.
+     - Có một "không gian dữ liệu" MẶC ĐỊNH, cố định (DEFAULT_SPACE_ID
+       bên dưới) — mở đúng trang này (URL trơn, không cần gắn thêm
+       gì) là luôn thấy lại toàn bộ ghi chú cũ, trên bất kỳ thiết bị
+       nào. Không còn sinh mã ngẫu nhiên mỗi lần mở nữa.
+     - Nếu muốn tách riêng một "sổ tay" khác dùng chung code/host
+       này (ví dụ cho người khác dùng độc lập), mở kèm ?s=mot-ma-tuy-y
+       ở cuối URL — không gắn ?s thì luôn dùng không gian mặc định.
+     - Ai có URL (kèm hoặc không kèm ?s=...) đều đọc/ghi được ngay —
+       không cần đăng nhập. Đừng đăng công khai link nếu không muốn
+       người lạ sửa nội dung.
      - Bạn cần tự deploy một backend nhỏ (miễn phí) để nhận các
        lệnh đọc/ghi này — xem file worker.js đi kèm và hướng dẫn
        deploy Cloudflare Worker + KV. Sau khi deploy xong, dán URL
@@ -58,15 +61,16 @@
 
   var API_BASE = 'https://so-tay-kien-thuc-ap.ntv-4102.workers.dev/';
 
+  // Mã không gian dữ liệu mặc định — cố định, không đổi mỗi lần mở.
+  // Có thể đổi thành chuỗi khác nếu muốn, nhưng chỉ đổi 1 LẦN DUY NHẤT
+  // rồi giữ nguyên mãi mãi, vì đổi lại sẽ như "mở sổ tay trống mới".
+  var DEFAULT_SPACE_ID = 'ntv4102-so-tay-kien-thuc';
+
   function getOrCreateSpaceId(){
     var params = new URLSearchParams(location.search);
     var s = params.get('s');
     if(s && /^[A-Za-z0-9_-]{6,64}$/.test(s)) return s;
-    s = Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
-    params.set('s', s);
-    var newUrl = location.pathname + '?' + params.toString() + location.hash;
-    history.replaceState(null, '', newUrl);
-    return s;
+    return DEFAULT_SPACE_ID;
   }
   var SPACE_ID = getOrCreateSpaceId();
   var apiBroken = false; // true nếu không gọi được API (sai API_BASE, mất mạng, worker lỗi...)
@@ -159,7 +163,7 @@
     } else if(apiBroken){
       t.textContent = 'Không gọi được API lưu trữ ngay lúc này (kiểm tra mạng, hoặc API_BASE trong app.js). Thay đổi có thể chưa được lưu.';
     } else {
-      t.textContent = 'Đang lưu trực tiếp qua API — mở đúng link này (có phần ?s=...) ở bất kỳ thiết bị nào cũng thấy và sửa được cùng dữ liệu.';
+      t.textContent = 'Đang lưu trực tiếp qua API — mở đúng trang này (URL trơn, không cần thêm gì) ở bất kỳ thiết bị nào cũng thấy và sửa được cùng dữ liệu.';
     }
   }
 
@@ -1833,7 +1837,7 @@
       '<p>Nhấn "▦ Bảng" để chèn bảng, gõ trực tiếp vào từng ô. Bạn có thể căn lề (<b>Trái / Giữa / Phải</b>) cho từng ô hoặc cả cột bằng các nút căn lề trên thanh công cụ chính hoặc các nút nhỏ ngay trên đầu bảng. Đưa chuột tới sát viền phải một ô đầu bảng để kéo đổi độ rộng cột, hoặc sát viền dưới một hàng để kéo đổi chiều cao hàng.</p>' +
       buildTableHTML(3,3).replace('Cột 1','Thuật ngữ').replace('Cột 2','Định nghĩa').replace('Cột 3','Tự đánh giá') +
       '<h3>5. Lưu trữ</h3>' +
-      '<p>Nội dung được lưu khi bạn nhấn <b>Ctrl + S</b> (hoặc <b>Command + S</b> trên macOS), hoặc tự động lưu định kỳ mỗi 1 phút nếu có thay đổi. Mọi dữ liệu lưu qua một API riêng — mở đúng link này (có phần <code>?s=...</code>) trên bất kỳ thiết bị nào cũng thấy và sửa được cùng dữ liệu, không cần đăng nhập. Dùng nút "🔗 Sao chép link chia sẻ" ở cuối danh sách bên trái để gửi cho thiết bị khác hoặc người khác — nhớ rằng ai có link đó cũng sửa được.</p>';
+      '<p>Nội dung được lưu khi bạn nhấn <b>Ctrl + S</b> (hoặc <b>Command + S</b> trên macOS), hoặc tự động lưu định kỳ mỗi 1 phút nếu có thay đổi. Mọi dữ liệu lưu qua một API riêng, gắn với địa chỉ trang này (không cần thêm gì vào URL) — mở đúng trang trên bất kỳ thiết bị nào cũng thấy và sửa được cùng dữ liệu, không cần đăng nhập. Dùng nút "🔗 Sao chép link chia sẻ" ở cuối danh sách bên trái để gửi cho thiết bị khác hoặc người khác — nhớ rằng ai có link đó cũng sửa được.</p>';
   }
 
   /* ---------------- init ---------------- */
