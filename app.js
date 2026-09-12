@@ -421,7 +421,31 @@
     block.removeAttribute('align');
   }
 
+  function selectAllEditorContent(){
+    var selection = window.getSelection();
+    if(!selection) return;
+
+    var range = document.createRange();
+    range.selectNodeContents(els.editor);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
   els.editor.addEventListener('keydown', function(ev){
+    // Native Ctrl+A can stop at the current empty editing line. Select the
+    // whole editor explicitly, while leaving nested contenteditable cells
+    // under the browser's native selection behavior.
+    if((ev.ctrlKey || ev.metaKey) && (ev.key === 'a' || ev.key === 'A')){
+      var nestedEditable = ev.target.closest
+        ? ev.target.closest('[contenteditable="true"]')
+        : null;
+      if(nestedEditable === els.editor){
+        ev.preventDefault();
+        selectAllEditorContent();
+      }
+      return;
+    }
+
     var selection = window.getSelection();
     var sourceBlock = selection && selection.rangeCount > 0
       ? getEditableBlock(selection.anchorNode)
