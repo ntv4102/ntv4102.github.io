@@ -59,12 +59,12 @@
        worker vào API_BASE bên dưới.
      ========================================================= */
 
-  var API_BASE = 'https://so-tay-kien-thuc-ap.ntv-4102.workers.dev/';
+  var API_BASE = 'https://REPLACE-WITH-YOUR-WORKER-URL.workers.dev';
 
   // Mã không gian dữ liệu mặc định — cố định, không đổi mỗi lần mở.
   // Có thể đổi thành chuỗi khác nếu muốn, nhưng chỉ đổi 1 LẦN DUY NHẤT
   // rồi giữ nguyên mãi mãi, vì đổi lại sẽ như "mở sổ tay trống mới".
-  var DEFAULT_SPACE_ID = 'ntv4102-so-tay-kien-thuc';
+  var DEFAULT_SPACE_ID = 'mty0axhm2wolzh9y';
 
   function getOrCreateSpaceId(){
     var params = new URLSearchParams(location.search);
