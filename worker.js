@@ -73,6 +73,7 @@ async function proxy(request, env, session, path) {
       const gh = await github(request, env, path, options);
       if (gh.status !== 409 || attempt === 1) {
         const text = await gh.text();
+        if (gh.status === 404) return response(request, 'Không tìm thấy file.', 404);
         if (!gh.ok) return response(request, text || gh.statusText, gh.status, { 'Content-Type': 'application/json' });
         const data = JSON.parse(text);
         return json(request, { sha: data.content && data.content.sha });

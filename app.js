@@ -122,10 +122,35 @@
       }
     },
     async putIndex(arr){ await workerFetch('/index',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(arr)}); writeCache('index',arr); },
-    async getNote(id){ if(!hasGithubConnection()) return readCache('note.'+id,null); try { var r=await workerFetch('/notes/'+encodeURIComponent(id)); var v=await r.json(); writeCache('note.'+id,v); return v; } catch(e){ apiBroken=true; return readCache('note.'+id,null); } },
+    async getNote(id){
+      if(!hasGithubConnection()) return readCache('note.'+id,null);
+      try {
+        var r = await workerFetch('/notes/'+encodeURIComponent(id));
+        var v = await r.json();
+        writeCache('note.'+id,v);
+        return v;
+      } catch(e) {
+        if(e.status === 404) return null;
+        apiBroken = true;
+        return readCache('note.'+id,null);
+      }
+    },
     async putNote(id,data){ await workerFetch('/notes/'+encodeURIComponent(id),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); writeCache('note.'+id,data); },
     async deleteNote(id){ await workerFetch('/notes/'+encodeURIComponent(id),{method:'DELETE'}); localStorage.removeItem(cacheKey('note.'+id)); },
-    async getLast(){ if(!hasGithubConnection()) return readCache('last',null); try { var r=await workerFetch('/last'); var v=await r.json(); var id=v&&v.id?v.id:null; writeCache('last',id); return id; } catch(e){ apiBroken=true; return readCache('last',null); } },
+    async getLast(){
+      if(!hasGithubConnection()) return readCache('last',null);
+      try {
+        var r = await workerFetch('/last');
+        var v = await r.json();
+        var id = v&&v.id ? v.id : null;
+        writeCache('last',id);
+        return id;
+      } catch(e) {
+        if(e.status === 404) return null;
+        apiBroken = true;
+        return readCache('last',null);
+      }
+    },
     async setLast(id){ await workerFetch('/last',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})}); writeCache('last',id); }
   };
   async function loadIndex(){ state.index=await Api.getIndex(); }
