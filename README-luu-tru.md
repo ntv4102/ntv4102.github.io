@@ -36,10 +36,20 @@ Thêm KV namespace binding tên `OAUTH_SESSIONS_KV`. Worker này dùng namespace
 Các file trong repository:
 
 ```text
-index.json
-last.json
-notes/<id>.json
+thu-muc-1/
+└─ thu-1/
+   ├─ index.json
+   ├─ last.json
+   └─ notes/
+      └─ <id>.json
 ```
+
+`index.json` chứa metadata cây thư mục (`folders`) và danh sách note
+(`notes`). Folder con liên kết với folder cha qua `parentId`, còn note liên
+kết folder qua `folderId`; nội dung note vẫn nằm trong `notes/<id>.json`.
+
+Worker dùng `GITHUB_REPO_PATH` nếu được cấu hình; nếu không, giá trị mặc
+định là `thu-muc-1/thu-1`.
 
 Sau khi đã tải dữ liệu, app giữ cache cục bộ để xem offline ở chế độ chỉ
 đọc. Muốn sửa, tạo hoặc xóa note cần phiên OAuth còn hiệu lực.

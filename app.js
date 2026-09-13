@@ -7,6 +7,7 @@
     sidebarBackdrop: document.getElementById('sidebar-backdrop'),
     list: document.getElementById('note-list'),
     search: document.getElementById('search'),
+    newFolderBtn: document.getElementById('new-folder-btn'),
     newBtn: document.getElementById('new-note-btn'),
     noNote: document.getElementById('no-note'),
     noNoteCreate: document.getElementById('no-note-create'),
@@ -36,7 +37,7 @@
     btnHighlightClear: document.getElementById('btn-highlight-clear')
   };
 
-  var state = { index: [], currentId: null, saveTimer: null, dirty: false, isSaving: false, lastTableCell: null, selectedCells: [], savedRange: null, bgTargetCells: null };
+  var state = { index: [], folders: [], currentFolderId: 'root', expandedFolders: { root: true }, currentId: null, saveTimer: null, dirty: false, isSaving: false, lastTableCell: null, selectedCells: [], savedRange: null, bgTargetCells: null };
 
   // Input màu ẩn dùng chung: 1 cho tô sáng văn bản, 1 cho đổ màu nền ô bảng.
   // Được thao tác bằng JS (.click()) khi người dùng bấm nút "màu khác…".
@@ -153,9 +154,26 @@
     },
     async setLast(id){ await workerFetch('/last',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:id})}); writeCache('last',id); }
   };
-  async function loadIndex(){ state.index=await Api.getIndex(); }
+  function defaultFolder(){
+    return { id: 'root', name: 'Thư mục gốc', parentId: null, createdAt: Date.now() };
+  }
+  function normalizeIndex(value){
+    if(Array.isArray(value)){
+      // The former flat index is intentionally not migrated into the new tree.
+      state.index = [];
+      state.folders = [defaultFolder()];
+      return;
+    }
+    state.index = value && Array.isArray(value.notes) ? value.notes : [];
+    state.folders = value && Array.isArray(value.folders) ? value.folders : [];
+    if(!state.folders.length) state.folders = [defaultFolder()];
+    state.index.forEach(function(note){ if(!note.folderId) note.folderId = 'root'; });
+    state.folders.forEach(function(folder){ if(typeof state.expandedFolders[folder.id] === 'undefined') state.expandedFolders[folder.id] = false; });
+    state.expandedFolders.root = true;
+  }
+  async function loadIndex(){ normalizeIndex(await Api.getIndex()); }
   async function saveIndex(){
-    await Api.putIndex(state.index);
+    await Api.putIndex({ folders: state.folders, notes: state.index });
     apiBroken = false;
     updateStorageStatusUI();
   }
@@ -181,7 +199,7 @@
     }
     setReadOnly(!hasGithubConnection() || apiBroken);
   }
-  function setReadOnly(readOnly){ els.title.readOnly=readOnly; els.editor.contentEditable=readOnly?'false':'true'; els.toolbar.style.pointerEvents=readOnly?'none':''; els.toolbar.style.opacity=readOnly?'0.55':''; els.newBtn.disabled=readOnly; els.noNoteCreate.disabled=readOnly; }
+  function setReadOnly(readOnly){ els.title.readOnly=readOnly; els.editor.contentEditable=readOnly?'false':'true'; els.toolbar.style.pointerEvents=readOnly?'none':''; els.toolbar.style.opacity=readOnly?'0.55':''; els.newBtn.disabled=readOnly; els.newFolderBtn.disabled=readOnly; els.noNoteCreate.disabled=readOnly; }
   els.githubConnectBtn.addEventListener('click', function(){ location.href=WORKER_API+'/auth/login?return_to='+encodeURIComponent(location.href.split('?')[0]); });
   els.githubDisconnectBtn.addEventListener('click', async function(){
     try { await workerFetch('/auth/logout', { method:'GET' }); } catch(e) {}
@@ -196,36 +214,84 @@
   /* ---------------- rendering sidebar ---------------- */
   function renderList(){
     var q = els.search.value.trim().toLowerCase();
-    var items = state.index.slice().sort(function(a,b){ return b.updatedAt - a.updatedAt; });
-    if(q) items = items.filter(function(n){ return n.title.toLowerCase().indexOf(q) !== -1; });
-
     els.list.innerHTML = '';
-    if(items.length === 0){
+    if(state.folders.length === 0){
       var empty = document.createElement('div');
-      empty.id = 'empty-list';
-      empty.textContent = q ? 'Không tìm thấy chủ đề phù hợp.' : 'Chưa có chủ đề nào. Hãy tạo chủ đề đầu tiên.';
+      empty.className = 'empty-list';
+      empty.textContent = q ? 'Không tìm thấy chủ đề phù hợp.' : 'Chưa có thư mục nào. Hãy tạo thư mục đầu tiên.';
       els.list.appendChild(empty);
       return;
     }
-    items.forEach(function(n){
-      var row = document.createElement('div');
-      row.className = 'note-item' + (n.id === state.currentId ? ' active' : '');
-      row.dataset.id = n.id;
+    function renderFolder(folder, depth){
+      var folderNotes = state.index.filter(function(note){
+        return note.folderId === folder.id && (!q || (note.title || '').toLowerCase().indexOf(q) !== -1);
+      }).sort(function(a,b){ return b.updatedAt - a.updatedAt; });
+      var children = state.folders.filter(function(child){ return child.parentId === folder.id; })
+        .sort(function(a,b){ return a.name.localeCompare(b.name, 'vi'); });
+      var hasSearchResult = q && (folderNotes.length || children.some(function(child){ return hasFolderResult(child); }));
+      if(q && !hasSearchResult) return;
 
-      var main = document.createElement('div');
-      main.className = 'ni-main';
-      var t = document.createElement('div'); t.className = 'ni-title'; t.textContent = n.title || 'Chưa có tiêu đề';
-      var m = document.createElement('div'); m.className = 'ni-meta'; m.textContent = fmtTime(n.updatedAt);
-      main.appendChild(t); main.appendChild(m);
+      var folderRow = document.createElement('div');
+      folderRow.className = 'folder-item' + (folder.id === state.currentFolderId ? ' selected' : '');
+      folderRow.style.setProperty('--folder-depth', depth);
+      var toggle = document.createElement('button');
+      toggle.className = 'folder-toggle';
+      toggle.type = 'button';
+      toggle.textContent = state.expandedFolders[folder.id] || q ? '▾' : '▸';
+      toggle.setAttribute('aria-label', 'Mở hoặc đóng ' + folder.name);
+      toggle.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        state.expandedFolders[folder.id] = !state.expandedFolders[folder.id];
+        renderList();
+      });
+      var label = document.createElement('span');
+      label.className = 'folder-label';
+      label.textContent = '📁 ' + (folder.name || 'Thư mục chưa đặt tên');
+      folderRow.appendChild(toggle);
+      folderRow.appendChild(label);
+      folderRow.addEventListener('click', function(){
+        state.currentFolderId = folder.id;
+        state.expandedFolders[folder.id] = true;
+        renderList();
+      });
+      els.list.appendChild(folderRow);
 
-      var del = document.createElement('button');
-      del.className = 'ni-del'; del.textContent = '✕'; del.title = 'Xoá chủ đề';
-      del.addEventListener('click', function(ev){ ev.stopPropagation(); confirmDeleteNote(n.id, n.title); });
-
-      row.appendChild(main); row.appendChild(del);
-      row.addEventListener('click', function(){ openNote(n.id); });
-      els.list.appendChild(row);
-    });
+      if(state.expandedFolders[folder.id] || q){
+        children.forEach(function(child){ renderFolder(child, depth + 1); });
+        folderNotes.forEach(function(note){
+          var row = document.createElement('div');
+          row.className = 'note-item' + (note.id === state.currentId ? ' active' : '');
+          row.style.setProperty('--folder-depth', depth + 1);
+          var main = document.createElement('div');
+          main.className = 'ni-main';
+          var title = document.createElement('div');
+          title.className = 'ni-title';
+          title.textContent = note.title || 'Chưa có tiêu đề';
+          var meta = document.createElement('div');
+          meta.className = 'ni-meta';
+          meta.textContent = fmtTime(note.updatedAt);
+          main.appendChild(title); main.appendChild(meta);
+          var del = document.createElement('button');
+          del.className = 'ni-del'; del.textContent = '✕'; del.title = 'Xoá chủ đề';
+          del.addEventListener('click', function(ev){ ev.stopPropagation(); confirmDeleteNote(note.id, note.title); });
+          row.appendChild(main); row.appendChild(del);
+          row.addEventListener('click', function(){ state.currentFolderId = note.folderId || 'root'; openNote(note.id); });
+          els.list.appendChild(row);
+        });
+        if(!children.length && !folderNotes.length){
+          var hint = document.createElement('div');
+          hint.className = 'folder-empty';
+          hint.textContent = 'Thư mục trống';
+          hint.style.setProperty('--folder-depth', depth + 1);
+          els.list.appendChild(hint);
+        }
+      }
+    }
+    function hasFolderResult(folder){
+      return state.index.some(function(note){ return note.folderId === folder.id && (note.title || '').toLowerCase().indexOf(q) !== -1; }) ||
+        state.folders.some(function(child){ return child.parentId === folder.id && hasFolderResult(child); });
+    }
+    state.folders.filter(function(folder){ return !folder.parentId; }).forEach(function(folder){ renderFolder(folder, 0); });
   }
 
   /* ---------------- open / create / delete ---------------- */
@@ -246,6 +312,7 @@
     upgradeTables(els.editor);
     var normalizedListState = normalizeOrderedListNumbering();
     var meta = state.index.find(function(n){ return n.id === id; });
+    if(meta) state.currentFolderId = meta.folderId || 'root';
     els.updatedAt.textContent = meta ? ('Cập nhật ' + fmtTime(meta.updatedAt)) : '';
     els.saveState.textContent = '';
     els.saveState.title = '';
@@ -271,11 +338,33 @@
     var now = Date.now();
     var title = (prefill && prefill.title) || '';
     var html = (prefill && prefill.html) || '';
-    state.index.push({ id: id, title: title, updatedAt: now });
+    state.index.push({ id: id, title: title, updatedAt: now, folderId: state.currentFolderId || 'root' });
+    state.expandedFolders[state.currentFolderId || 'root'] = true;
     await saveIndex();
     await saveNote(id, { title: title, html: html });
     await openNote(id);
     if(!prefill) els.title.focus();
+  }
+
+  async function createFolder(){
+    if(!hasGithubConnection()){
+      updateStorageStatusUI();
+      return;
+    }
+    var name = window.prompt('Tên thư mục mới:');
+    if(!name || !name.trim()) return;
+    var folder = {
+      id: 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name: name.trim(),
+      parentId: state.currentFolderId || 'root',
+      createdAt: Date.now()
+    };
+    state.folders.push(folder);
+    state.expandedFolders[folder.parentId] = true;
+    await saveIndex();
+    state.currentFolderId = folder.id;
+    state.expandedFolders[folder.id] = true;
+    renderList();
   }
 
   function confirmDeleteNote(id, title){
@@ -2332,7 +2421,7 @@
 
   /* ---------------- export / import (sao lưu thủ công, không bắt buộc) ---------------- */
   els.exportBtn.addEventListener('click', async function(){
-    var payload = { index: state.index, notes: {} };
+    var payload = { folders: state.folders, index: state.index, notes: {} };
     for(var i = 0; i < state.index.length; i++){
       var n = state.index[i];
       payload.notes[n.id] = await loadNote(n.id);
@@ -2354,6 +2443,7 @@
       try{
         var payload = JSON.parse(reader.result);
         if(!payload.index || !payload.notes) throw new Error('sai định dạng');
+        if(Array.isArray(payload.folders) && payload.folders.length) state.folders = payload.folders;
         for(var i = 0; i < payload.index.length; i++){
           var meta = payload.index[i];
           var existing = state.index.find(function(n){ return n.id === meta.id; });
@@ -2377,6 +2467,7 @@
   });
   els.sidebarBackdrop.addEventListener('click', function(){ setSidebarOpen(false); });
   els.search.addEventListener('input', renderList);
+  els.newFolderBtn.addEventListener('click', function(){ createFolder(); });
   els.newBtn.addEventListener('click', function(){ createNote(); });
   els.noNoteCreate.addEventListener('click', function(){ createNote(); });
 

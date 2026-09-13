@@ -23,7 +23,9 @@ trong phiên làm việc ở Workers KV, không bao giờ được gửi tới t
 
 Tạo một repository **private** riêng cho note. Worker OAuth cần các biến:
 `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_REPO_OWNER`,
-`GITHUB_REPO_NAME`, cùng KV binding `OAUTH_SESSIONS_KV`. Tạo GitHub OAuth
+`GITHUB_REPO_NAME`, cùng KV binding `OAUTH_SESSIONS_KV`. Có thể thêm
+`GITHUB_REPO_PATH` để đặt thư mục lưu, mặc định là `thu-muc-1/thu-1`.
+Tạo GitHub OAuth
 App và đặt callback URL chính xác:
 
 `https://so-tay-kien-thuc-ap.ntv4102.workers.dev/auth/callback`
@@ -34,10 +36,18 @@ trong KV; trình duyệt chỉ nhận cookie phiên HttpOnly.
 Các file được dùng trong repository:
 
 ```text
-index.json
-last.json
-notes/<id>.json
+thu-muc-1/
+└─ thu-1/
+   ├─ index.json
+   ├─ last.json
+   └─ notes/
+      └─ <id>.json
 ```
+
+`index.json` lưu cây thư mục dưới dạng `{ "folders": [...], "notes": [...] }`.
+Mỗi folder có `id`, `name`, `parentId`; mỗi note có `folderId`. Sidebar
+hiển thị cây này theo cấp, bấm mũi tên để mở thư mục con và tự co giãn trên
+thiết bị nhỏ.
 
 Mỗi lần lưu tạo hoặc cập nhật một commit qua GitHub Contents API. Vì
 vậy repository có lịch sử thay đổi để khôi phục khi cần, và không còn

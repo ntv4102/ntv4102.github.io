@@ -3,10 +3,11 @@
  *
  * Required bindings/variables:
  *   OAUTH_SESSIONS_KV (KV), GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET,
- *   GITHUB_REPO_OWNER, GITHUB_REPO_NAME
+ *   GITHUB_REPO_OWNER, GITHUB_REPO_NAME, GITHUB_REPO_PATH (optional)
  */
 const COOKIE = 'notes_session';
 const CALLBACK = '/auth/callback';
+const DEFAULT_REPO_PATH = 'thu-muc-1/thu-1';
 const SESSION_COOKIE = COOKIE + '=SESSION; HttpOnly; Secure; SameSite=None; Partitioned; Path=/; Max-Age=2592000';
 const CLEAR_COOKIE = COOKIE + '=; HttpOnly; Secure; SameSite=None; Partitioned; Path=/; Max-Age=0';
 
@@ -35,7 +36,8 @@ const cookieValue = (request) => {
 };
 const githubPath = (env, path) =>
   'https://api.github.com/repos/' + encodeURIComponent(env.GITHUB_REPO_OWNER) + '/' +
-  encodeURIComponent(env.GITHUB_REPO_NAME) + '/contents/' + path;
+  encodeURIComponent(env.GITHUB_REPO_NAME) + '/contents/' +
+  (env.GITHUB_REPO_PATH || DEFAULT_REPO_PATH) + '/' + path;
 
 async function github(request, env, path, options) {
   const baseHeaders = {
