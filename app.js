@@ -18,6 +18,8 @@
     saveState: document.getElementById('save-state'),
     editor: document.getElementById('editor'),
     toolbar: document.getElementById('toolbar'),
+    btnUndo: document.getElementById('btn-undo'),
+    btnRedo: document.getElementById('btn-redo'),
     btnCheck: document.getElementById('btn-check'),
     btnIcon: document.getElementById('btn-icon'),
     btnTable: document.getElementById('btn-table'),
@@ -247,8 +249,19 @@
       var label = document.createElement('span');
       label.className = 'folder-label';
       label.textContent = '📁 ' + (folder.name || 'Thư mục chưa đặt tên');
+      var removeFolder = document.createElement('button');
+      removeFolder.className = 'folder-delete';
+      removeFolder.type = 'button';
+      removeFolder.textContent = '✕';
+      removeFolder.title = folder.id === 'root' ? 'Không thể xóa thư mục gốc' : 'Xóa thư mục';
+      removeFolder.disabled = folder.id === 'root';
+      removeFolder.addEventListener('click', function(ev){
+        ev.stopPropagation();
+        confirmDeleteFolder(folder.id, folder.name);
+      });
       folderRow.appendChild(toggle);
       folderRow.appendChild(label);
+      folderRow.appendChild(removeFolder);
       folderRow.addEventListener('click', function(){
         state.currentFolderId = folder.id;
         state.expandedFolders[folder.id] = true;
@@ -365,6 +378,49 @@
     state.currentFolderId = folder.id;
     state.expandedFolders[folder.id] = true;
     renderList();
+  }
+
+  function getFolderTreeIds(folderId){
+    var ids = [folderId];
+    state.folders.forEach(function(folder){
+      if(folder.parentId === folderId) ids = ids.concat(getFolderTreeIds(folder.id));
+    });
+    return ids;
+  }
+
+  function confirmDeleteFolder(id, name){
+    if(id === 'root') return;
+    if(!hasGithubConnection()){
+      updateStorageStatusUI();
+      return;
+    }
+    var folderIds = getFolderTreeIds(id);
+    var noteIds = state.index.filter(function(note){
+      return folderIds.indexOf(note.folderId || 'root') !== -1;
+    }).map(function(note){ return note.id; });
+    els.modalText.textContent = 'Xóa thư mục "' + (name || 'Chưa đặt tên') +
+      '" cùng ' + noteIds.length + ' chủ đề bên trong? Không thể hoàn tác.';
+    els.modalBg.classList.add('show');
+    els.modalOk.onclick = async function(){
+      els.modalBg.classList.remove('show');
+      try{
+        await Promise.all(noteIds.map(function(noteId){ return deleteNoteStorage(noteId); }));
+        state.folders = state.folders.filter(function(folder){ return folderIds.indexOf(folder.id) === -1; });
+        state.index = state.index.filter(function(note){ return noteIds.indexOf(note.id) === -1; });
+        folderIds.forEach(function(folderId){ delete state.expandedFolders[folderId]; });
+        if(folderIds.indexOf(state.currentFolderId) !== -1) state.currentFolderId = 'root';
+        if(state.currentId && noteIds.indexOf(state.currentId) !== -1){
+          state.currentId = null;
+          state.dirty = false;
+          els.noteView.style.display = 'none';
+          els.noNote.style.display = 'flex';
+        }
+        await saveIndex();
+        renderList();
+      }catch(e){
+        alert('Không thể xóa thư mục. Dữ liệu chưa được thay đổi.');
+      }
+    };
   }
 
   function confirmDeleteNote(id, title){
@@ -1338,6 +1394,8 @@
 
   function updateToolbarState(){
     if(!els.editor) return;
+    els.btnUndo.disabled = !document.queryCommandEnabled('undo');
+    els.btnRedo.disabled = !document.queryCommandEnabled('redo');
     var ols = getSelectedOls();
     var hasAlpha = ols.length > 0 && ols.some(isAlphaOrderedList);
     var hasNumeric = ols.length > 0 && ols.some(function(ol){ return !ol.getAttribute('type') || ol.getAttribute('type') === '1'; });
@@ -1428,7 +1486,12 @@
     var btn = ev.target.closest('.tb-btn');
     if(!btn) return;
     ensureEditableFocus();
-    if(btn.dataset.align){
+    if(btn.id === 'btn-undo' || btn.id === 'btn-redo'){
+      document.execCommand(btn.id === 'btn-undo' ? 'undo' : 'redo', false, null);
+      scheduleSave();
+      updateToolbarState();
+      return;
+    } else if(btn.dataset.align){
       applyAlignment(btn.dataset.align);
       return;
     } else if(btn.dataset.valign){

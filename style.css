@@ -184,9 +184,36 @@ h3,
 
 .folder-label {
   min-width: 0;
+  flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.folder-delete {
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 5px;
+  border-radius: var(--radius);
+  visibility: hidden;
+}
+
+.folder-item:hover .folder-delete,
+.folder-delete:focus-visible {
+  visibility: visible;
+}
+
+.folder-delete:hover {
+  color: var(--incorrect);
+  background: var(--incorrect-soft);
+}
+
+.folder-delete:disabled {
+  display: none;
 }
 
 .folder-empty {
@@ -576,6 +603,17 @@ h3,
 
 .tb-btn:hover {
   background: var(--accent-soft);
+}
+
+.tb-btn:disabled {
+  color: var(--ink-faint);
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.tb-history-btn {
+  min-width: 30px;
+  font-size: 18px;
 }
 
 .tb-hl-label {
